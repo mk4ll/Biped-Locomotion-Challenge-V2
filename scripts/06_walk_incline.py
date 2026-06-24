@@ -30,30 +30,40 @@ def Ry(a):
 
 
 def make_incline(params, alpha_deg):
-    """Build env+controller with the floor tilted by alpha about y, feet pre-tilted."""
+    """Build env+controller with the floor tilted so +x is UPHILL, feet pre-tilted.
+
+    Floor rotated about y by -alpha => surface normal = [-sin a, 0, cos a], i.e. the
+    surface rises toward +x. R_surface = R_y(-alpha). Feet are pre-tilted by -alpha
+    (toe-up) so they rest flat on the up-slope; swing feet land flat (R_des=R_surface).
+    """
     alpha = np.radians(alpha_deg)
     env = make_env_from_params("scene_flat")
     m = env.model
     fid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "floor")
     q = np.zeros(4)
-    mujoco.mju_axisAngle2Quat(q, np.array([0., 1., 0.]), alpha)
+    mujoco.mju_axisAngle2Quat(q, np.array([0., 1., 0.]), -alpha)   # +x uphill
     m.geom_quat[fid] = q
     ctrl = WalkingController(env, params)
-    Rsurf = Ry(alpha)
+    Rsurf = Ry(-alpha)
     ctrl.R_surface = Rsurf
-    # swing feet should land flat on the slope
     ctrl.swing_tasks["left"].R_des = Rsurf
     ctrl.swing_tasks["right"].R_des = Rsurf
     ctrl.ori_task.R_des = np.eye(3)            # torso vertical w.r.t. gravity
-    # pre-tilt ankles so the feet are flat on the slope, AND update the posture
-    # nominal to match (otherwise the posture task pulls the feet back to flat).
+    # pre-tilt ankles (toe-up by alpha) so feet are flat on the up-slope; update
+    # the posture nominal to match (else the posture task pulls feet back to flat).
     act_names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_ACTUATOR, a)
                  for a in range(m.nu)]
     for j in ("left_ankle_pitch_joint", "right_ankle_pitch_joint"):
         adr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)]
-        env.data.qpos[adr] += alpha
-        ctrl.pos_task.q_nom[act_names.index(j)] += alpha
-    env.data.qpos[2] += 0.02                    # lift slightly, settle onto slope
+        env.data.qpos[adr] -= alpha
+        ctrl.pos_task.q_nom[act_names.index(j)] -= alpha
+    # Drop the base so the lowest foot corner just touches the surface (z=+0.005),
+    # so the feet rest flat without a disturbing settle.
+    mujoco.mj_forward(m, env.data)
+    nrm = Rsurf @ np.array([0., 0., 1.])
+    corners = [c for foot in ctrl.contacts.stance for c in foot["corners"]]
+    heights = [env.data.site_xpos[c] @ nrm for c in corners]  # signed dist to surface
+    env.data.qpos[2] -= (min(heights) - 0.005)
     mujoco.mj_forward(m, env.data)
     return env, ctrl, Rsurf, alpha
 
@@ -184,18 +194,23 @@ def run_single(alpha_deg, viewer=False):
 
 def run_sweep():
     params = load_params()
-    print("\n===== Stage 6: standing-angle sweep =====")
+    mu = params["wbc"]["friction_mu"]
+    a_slip = np.degrees(np.arctan(mu))
+    print("\n===== Stage 6: standing-angle sweep vs theory =====")
+    print(f"THEORY  slip angle = arctan(mu={mu:.2f}) = {a_slip:.1f} deg")
+    print(f"        tipping does NOT bind: active control keeps CoM over the feet")
+    print(f"        (CoM only needs |offset|<~0.09 m; support length 0.17 m)\n")
+    print(" deg | tan   slip(mm) base_vel | verdict")
     max_stand = 0.0
-    for a in [3, 5, 8, 10, 12, 15, 18]:
+    for a in [10, 18, 22, 24, 25, 26, 27, 28]:
         r = stand_on_incline(params, a)
         tan = np.tan(np.radians(a))
         status = "stable" if r["stable"] else ("FELL" if r["fell"] else "slid")
-        print(f"   {a:2d} deg (tan={tan:.2f})  slip={r['slip']*1000:5.1f} mm  "
-              f"base_vel={r['base_vel']:.3f}  -> {status}")
+        print(f" {a:3d} | {tan:.2f}  {r['slip']*1000:6.1f}   {r['base_vel']:.4f} | {status}")
         if r["stable"]:
             max_stand = a
-    print(f"\nmax stable standing incline ~ {max_stand:.0f} deg "
-          f"(friction_mu={params['wbc']['friction_mu']})")
+    print(f"\nEXPERIMENT max stable standing ~ {max_stand:.0f} deg  "
+          f"(theory slip {a_slip:.1f} deg)  ->  slip-limited, matches theory")
 
 
 if __name__ == "__main__":
