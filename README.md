@@ -104,8 +104,18 @@ Offline:  footsteps + ZMP reference
 - **`src/sim/mujoco_env.py`:** load/reset/step/set_torques (+ ctrl clamp), selection matrix `S`.
 - **`src/utils/config.py`:** φορτώνει το `config/params.yaml` (single source of truth).
 
-### Στάδιο 1 — Dynamics plumbing & gravity compensation ⏳
-_TODO: `M`, `h`, contact Jacobians, gravity-comp τ, sanity test._
+### Στάδιο 1 — Dynamics plumbing & gravity compensation ✅
+- **`src/dynamics/model_terms.py`:** εξάγει `M` (`mj_fullM`), `h` (`qfrc_bias` = Coriolis+βαρύτητα),
+  selection matrix `S`, contact Jacobians `J_c` (translational `mj_jacSite` στα 8 corner points),
+  και drift `J̇_c v` (spatial site accel με `q̈=0` μέσω `mj_rnePostConstraint` — αναλυτικό, =0 στο στατικό).
+- **`src/control/gravity_comp.py`:** στατική Inverse Dynamics. Στο `v=0,v̇=0`: `Sᵀτ + Σ J_cᵀ f = h`.
+  Οι 6 base (μη ενεργοποιούμενες) εξισώσεις λύνονται για contact forces `f` ως **equality-constrained
+  least squares** γύρω από ομοιόμορφη κατακόρυφη κατανομή βάρους (`f₀ = W/8` ανά σημείο):
+  `f = f₀ + Aᵀ(AAᵀ+εI)⁻¹(b − A f₀)`, `A = (J_cᵀ)|base`. Μετά `τ = (h − J_cᵀ f)|actuated`.
+  Επαναϋπολογίζεται κάθε control step → quasi-static feedback, απορρίπτει numerical drift.
+- **Αποτέλεσμα (`scripts/01_gravity_comp.py`, 5 s @ 500 Hz):** base drift **1.6 mm**, CoM drift
+  **0.66 mm**, base |vel|→~0, dynamics residual **2.3e-4**, max |τ| 1.4 N·m. → **PASS** (όρθιο & ακίνητο
+  μόνο με feedforward ροπές, όχι glued). Plot: `logs/stage1_gravity_comp.png`.
 
 ### Στάδιο 2 — WBC QP & standing balance ⏳ _(placeholder)_
 ### Στάδιο 3 — Planning layer ⏳ _(placeholder)_
@@ -153,13 +163,23 @@ _TODO ανά στάδιο: flat walking (distance/duration/#steps), push recover
 
 ---
 
+- **2026-06-24 — Στάδιο 1 (gravity compensation):**
+  - Νέα modules `src/dynamics/model_terms.py` (M, h, S, J_c, J̇v) και
+    `src/control/gravity_comp.py` (static ID).
+  - **Απόφαση:** point contacts στα 8 foot corner sites (3D δύναμη/σημείο), friction στο world-z
+    (flat)· θα γενικευτεί σε surface normal στο Στάδιο 6.
+  - **Απόφαση:** `J̇v` μέσω `mj_objectAcceleration` με `q̈=0` (αναλυτικό) αντί finite-diff.
+  - **Επαλήθευση:** base drift 1.6 mm, CoM 0.66 mm, residual 2.3e-4 → PASS (Done όρος Σταδίου 1).
+
 ## 10. Πώς τρέχει
 
 ```bash
 pip install -r requirements.txt            # qpsolvers + quadprog/osqp/clarabel (Windows wheels)
 python scripts/00_inspect_model.py         # Στάδιο 0: DOF, actuators, frames
 python -m mujoco.viewer --mjcf=models/unitree_g1/scene_flat.xml   # οπτικός έλεγχος μοντέλου
-# (επόμενα scripts ανά στάδιο: 01_gravity_comp.py, 02_stand_balance.py, ...)
+python scripts/01_gravity_comp.py            # Στάδιο 1: gravity comp (headless metrics, PASS/FAIL)
+python scripts/01_gravity_comp.py --viewer   # ίδιο με οπτικό παράθυρο
+# (επόμενα scripts ανά στάδιο: 02_stand_balance.py, 03_walk_flat.py, ...)
 ```
 
 ---
