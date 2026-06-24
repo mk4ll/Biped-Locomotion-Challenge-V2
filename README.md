@@ -117,7 +117,22 @@ Offline:  footsteps + ZMP reference
   **0.66 mm**, base |vel|→~0, dynamics residual **2.3e-4**, max |τ| 1.4 N·m. → **PASS** (όρθιο & ακίνητο
   μόνο με feedforward ροπές, όχι glued). Plot: `logs/stage1_gravity_comp.png`.
 
-### Στάδιο 2 — WBC QP & standing balance ⏳ _(placeholder)_
+### Στάδιο 2 — WBC QP & standing balance ✅
+- **`src/control/wbc_qp.py`:** το QP Inverse Dynamics. Μεταβλητές `x=[v̇(35); τ(29); f(3·ncp)]`.
+  - Objective: `Σ w_i‖J_i v̇ − b_i‖²` + tiny regularization (στρικτά PD για `quadprog`).
+  - Equalities: δυναμική `[M −Sᵀ −J_fᵀ]x = −h` (35) + **rigid contact 6D ανά stance foot** `J_con v̇ = −J̇v` (6/πόδι).
+  - Inequalities: friction pyramid στα corner forces + `τ` limits (lb/ub).
+  - **Safe fallback** σε infeasibility (clarabel → +reg → gravity-comp τ).
+- **`src/control/tasks.py`:** CoM (`mj_jacSubtreeCom`), Orientation (pelvis upright vs gravity),
+  Posture (regularization προς keyframe), Foot (swing). Όλα PD acceleration-level.
+- **`src/dynamics/contacts.py`:** `ContactSet` (double/left/right) + `friction_pyramid` στο
+  **surface frame** (R_surface, flat=I).
+- **Κρίσιμη σχεδιαστική επιλογή:** οι 4 corner accelerations/πόδι είναι **redundant** (rigid foot,
+  rank 6) → το `quadprog` αποτυγχάνει. Λύση: contact equality στο **6D foot site** (full-rank),
+  ενώ οι **δυνάμεις** μένουν στα 4 corners (για friction cone/CoP). Spec-faithful hard equality.
+- **Αποτέλεσμα (`scripts/02_stand_balance.py`):** stand σταθερό (Σfz=327 N), weight-shift CoM range
+  111 mm (err 15.7 mm), single-support balance με δεξί πόδι airborne (28 mm). **QP 100% feasible.**
+  → **PASS**. Plot: `logs/stage2_stand_balance.png`.
 ### Στάδιο 3 — Planning layer ⏳ _(placeholder)_
 ### Στάδιο 4 — Δυναμική βάδιση σε flat ⏳ _(placeholder)_
 ### Στάδιο 5 — Robustness / push recovery ⏳ _(placeholder)_
@@ -131,14 +146,17 @@ Offline:  footsteps + ZMP reference
 |---|---|---|
 | `model.base_body` | `pelvis` | floating base |
 | `model.torso_body` | `torso_link` | torso orientation task |
-| `wbc.friction_mu` | 0.6 | συντελεστής τριβής (= foot geom) |
-| `wbc.f_min` | 10 N | ελάχιστη normal δύναμη ανά επαφή |
-| `wbc.solver` | quadprog | QP backend (proxqp δεν έχει Windows wheel) |
+| `wbc.friction_mu` | 0.5 | συντελεστής τριβής (conservative vs foot geom 0.6, margin) |
+| `wbc.f_min` | 1 N | ελάχιστη normal δύναμη ανά corner point |
+| `wbc.solver` | quadprog | QP backend (full-rank· proxqp δεν έχει Windows wheel) |
+| `wbc.reg.{qddot,torque,force}` | 1e-4/1e-4/1e-3 | regularization (στρικτά PD QP) |
+| `tasks.com.{w,kp,kd}` | 100 / 100 / 20 | CoM task (μεγάλο βάρος) |
+| `tasks.orientation.{w,kp,kd}` | 20 / 80 / 18 | pelvis upright vs gravity |
+| `tasks.posture.{w,kp,kd}` | 1 / 20 / 8 | regularization προς keyframe |
+| `tasks.swing_foot.{w,kp,kd}` | 120 / 300 / 34 | swing foot (single/SS) |
 | `env.gravity` | 9.81 | — |
 | `env.incline_deg` | 3.0 | αρχική κλίση (Στάδιο 6) |
-| `sim.control_rate_hz` | 1000 | ρυθμός WBC QP |
-
-_(Συμπληρώνεται με task gains/βάρη καθώς προχωράμε.)_
+| `sim.control_rate_hz` | 1000 | ρυθμός-στόχος WBC QP (sim @ 500 Hz, ~490 Hz πραγματικό) |
 
 ---
 
@@ -171,6 +189,18 @@ _TODO ανά στάδιο: flat walking (distance/duration/#steps), push recover
   - **Απόφαση:** `J̇v` μέσω `mj_objectAcceleration` με `q̈=0` (αναλυτικό) αντί finite-diff.
   - **Επαλήθευση:** base drift 1.6 mm, CoM 0.66 mm, residual 2.3e-4 → PASS (Done όρος Σταδίου 1).
 
+- **2026-06-24 — Στάδιο 2 (WBC QP standing balance):**
+  - Νέα modules: `wbc_qp.py`, `tasks.py`, `contacts.py`. Tasks/βάρη/gains στο `params.yaml`.
+  - **Bug #1 (rank):** 4 corner-point contact constraints/πόδι είναι redundant (rank 6) →
+    `quadprog`/interior-point αποτυγχάνουν (PrimalInfeasible). **Fix:** rigid **6D foot-site**
+    contact equality (full-rank), δυνάμεις στα corners. Solver: `quadprog` (γρήγορος, full-rank).
+  - **Bug #2 (gravity in drift):** `mj_objectAcceleration` περιλαμβάνει το gravity offset στο
+    `cacc`, μολύνοντας το `J̇v` με ~9.81 m/s² ακόμη και σε ηρεμία → ο contact constraint ανάγκαζε
+    «πτώση» (`Σfz=8 N` αντί 327). **Fix:** μηδενισμός **βαρύτητας ΚΑΙ q̈** στον υπολογισμό του `J̇v`.
+  - **Απόφαση:** single-support schedule = αργό CoM shift πάνω από το πόδι (2 s) → αργό lift (1 s)·
+    το απότομο schedule έριχνε το ρομπότ (στενά πέλματα G1).
+  - **Επαλήθευση:** stand/weight-shift/single-support όλα PASS, QP 100% feasible (Done όρος Σταδίου 2).
+
 ## 10. Πώς τρέχει
 
 ```bash
@@ -179,7 +209,9 @@ python scripts/00_inspect_model.py         # Στάδιο 0: DOF, actuators, fra
 python -m mujoco.viewer --mjcf=models/unitree_g1/scene_flat.xml   # οπτικός έλεγχος μοντέλου
 python scripts/01_gravity_comp.py            # Στάδιο 1: gravity comp (headless metrics, PASS/FAIL)
 python scripts/01_gravity_comp.py --viewer   # ίδιο με οπτικό παράθυρο
-# (επόμενα scripts ανά στάδιο: 02_stand_balance.py, 03_walk_flat.py, ...)
+python scripts/02_stand_balance.py           # Στάδιο 2: WBC stand/weight-shift/single-support
+python scripts/02_stand_balance.py --viewer  # ίδιο με οπτικό παράθυρο
+# (επόμενα scripts ανά στάδιο: 03_walk_flat.py, 04_walk_incline.py, ...)
 ```
 
 ---

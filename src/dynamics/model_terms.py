@@ -61,29 +61,50 @@ class ModelTerms:
             return np.zeros((0, self.nv))
         return np.vstack([self.site_jacobian(data, sid) for sid in ids])
 
-    def contact_jdot_v(self, data, active_site_ids=None) -> np.ndarray:
-        """Drift term J̇_c v for each contact point (3*n,).
+    def _site_accels(self, data, site_ids):
+        """Raw spatial site accelerations [ang; lin] with q̈=0 AND gravity=0.
 
-        Spatial site acceleration = J q̈ + J̇ v.  Setting q̈ = 0 isolates J̇ v.
-        We temporarily zero qacc and recompute the body accelerations
-        (mj_rnePostConstraint), read the site accel, then restore. With v = 0
-        (static) this is exactly 0, as expected.
+        Spatial site acceleration = J q̈ + J̇ v (+ gravity offset). MuJoCo's
+        mj_objectAcceleration includes the world gravity offset in cacc, so we
+        must zero BOTH q̈ and gravity to isolate the pure convective term J̇ v.
+        Returns list of length-6 arrays [ang(3); lin(3)] (MuJoCo ordering).
         """
-        ids = self.site_ids if active_site_ids is None else active_site_ids
-        if len(ids) == 0:
-            return np.zeros(0)
-        saved = data.qacc.copy()
+        saved_qacc = data.qacc.copy()
+        saved_g = self.model.opt.gravity.copy()
         data.qacc[:] = 0.0
+        self.model.opt.gravity[:] = 0.0
         mujoco.mj_rnePostConstraint(self.model, data)
         out = []
         acc = np.zeros(6)
-        for sid in ids:
+        for sid in site_ids:
             mujoco.mj_objectAcceleration(self.model, data, mujoco.mjtObj.mjOBJ_SITE,
-                                         sid, acc, 0)  # 0 -> world frame; [ang; lin]
-            out.append(acc[3:6].copy())  # linear part = J̇v for this point
-        data.qacc[:] = saved
+                                         sid, acc, 0)  # world frame; [ang; lin]
+            out.append(acc.copy())
+        data.qacc[:] = saved_qacc
+        self.model.opt.gravity[:] = saved_g
         mujoco.mj_rnePostConstraint(self.model, data)  # restore cacc
-        return np.concatenate(out)
+        return out
+
+    def contact_jdot_v(self, data, active_site_ids=None) -> np.ndarray:
+        """Drift term J̇_c v (linear) for each contact point (3*n,). v=0 -> 0."""
+        ids = self.site_ids if active_site_ids is None else active_site_ids
+        if len(ids) == 0:
+            return np.zeros(0)
+        return np.concatenate([a[3:6] for a in self._site_accels(data, ids)])
 
     def site_pos(self, data, site_id) -> np.ndarray:
         return data.site_xpos[site_id].copy()
+
+    # -- full 6D site Jacobian / drift (for rigid-foot contact constraint) -----
+    def site_jacobian6(self, data, site_id) -> np.ndarray:
+        """6D site Jacobian [lin(3); ang(3)] x nv."""
+        mujoco.mj_jacSite(self.model, data, self._jacp, self._jacr, site_id)
+        return np.vstack([self._jacp.copy(), self._jacr.copy()])
+
+    def site_jdot_v6(self, data, site_ids) -> np.ndarray:
+        """Stacked 6D drift J̇v = [lin; ang] per site (6*n,). v=0 -> 0."""
+        if len(site_ids) == 0:
+            return np.zeros(0)
+        # _site_accels returns [ang; lin]; reorder to [lin; ang] to match jac6.
+        return np.concatenate([np.concatenate([a[3:6], a[0:3]])
+                               for a in self._site_accels(data, site_ids)])

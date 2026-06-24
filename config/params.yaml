@@ -49,15 +49,45 @@ gravity_comp:
 # Stage 2: WBC QP  (filled in Stage 2)
 # ---------------------------------------------------------------------
 wbc:
-  friction_mu: 0.6             # matches foot geom friction
-  f_min: 10.0                  # min normal force per contact [N]
-  solver: "quadprog"           # qpsolvers backend (Windows wheel; proxqp unavailable on Win)
-  solver_fallback: "osqp"      # used if primary returns infeasible
+  friction_mu: 0.5             # conservative vs foot geom friction (0.6) for margin
+  f_min: 1.0                   # min normal force per contact point [N]
+  solver: "quadprog"           # fast dense PD solver; contact eq is full-rank (6D/foot)
+  solver_fallback: "clarabel"  # interior-point fallback on infeasibility
   reg:
-    qddot: 1.0e-6
-    torque: 1.0e-6
-    force: 1.0e-6
-  tasks: {}                    # gains/weights added in Stage 2
+    qddot: 1.0e-4              # regularization on v̇ (keeps QP strictly PD)
+    torque: 1.0e-4            # regularization on τ
+    force: 1.0e-3             # regularization on contact forces (spreads load)
+  # Task PD gains and weights (acceleration-level: a_des = a_ref + Kp e + Kd ė).
+  tasks:
+    com:
+      weight: 100.0
+      kp: 100.0
+      kd: 20.0
+      height: null            # null => use nominal CoM height from keyframe
+    orientation:              # pelvis/torso upright w.r.t. gravity
+      weight: 20.0
+      kp: 80.0
+      kd: 18.0
+    posture:                  # regularize joints toward nominal keyframe pose
+      weight: 1.0
+      kp: 20.0
+      kd: 8.0
+    swing_foot:               # only active for the airborne foot (single support)
+      weight: 120.0
+      kp: 300.0
+      kd: 34.0
+
+# ---------------------------------------------------------------------
+# Stage 2: standing-balance demo schedule
+# ---------------------------------------------------------------------
+stand_balance:
+  settle_s: 1.0                # initial settle
+  weight_shift_amp: 0.06       # lateral CoM shift amplitude [m]
+  weight_shift_period_s: 3.0
+  ss_shift_s: 2.0              # time to move CoM over the stance foot (double support)
+  ss_lift_s: 1.0              # time to raise the swing foot
+  single_support_lift: 0.05    # swing foot lift height [m] for SS test
+  hold_s: 3.0                  # hold on one foot after lift
 
 # ---------------------------------------------------------------------
 # Stage 3-4: planner / gait  (filled later)
