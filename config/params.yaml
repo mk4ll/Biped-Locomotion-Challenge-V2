@@ -90,6 +90,17 @@ stand_balance:
   hold_s: 3.0                  # hold on one foot after lift
 
 # ---------------------------------------------------------------------
-# Stage 3-4: planner / gait  (filled later)
+# Stage 3-4: planner / gait
 # ---------------------------------------------------------------------
-gait: {}
+gait:
+  n_steps: 8                  # number of walking steps
+  step_length: 0.15           # forward advance per step [m]
+  step_width: null            # null => use nominal foot separation from the model
+  swing_apex: 0.05            # swing-foot peak height [m]
+  t_ss: 0.7                   # single-support duration [s]
+  t_ds: 0.2                   # double-support duration [s]
+  t_ds_init: 0.6              # initial settle (double support) [s]
+  t_ds_final: 0.8             # final settle [s]
+  first_swing: "right"        # which foot swings first
+  com_height: null            # null => use nominal CoM height from keyframe
+  dt_plan: 0.002              # planning sample period [s] (matches sim)

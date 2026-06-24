@@ -133,7 +133,22 @@ Offline:  footsteps + ZMP reference
 - **Αποτέλεσμα (`scripts/02_stand_balance.py`):** stand σταθερό (Σfz=327 N), weight-shift CoM range
   111 mm (err 15.7 mm), single-support balance με δεξί πόδι airborne (28 mm). **QP 100% feasible.**
   → **PASS**. Plot: `logs/stage2_stand_balance.png`.
-### Στάδιο 3 — Planning layer ⏳ _(placeholder)_
+### Στάδιο 3 — Planning layer ✅
+Πλήρως **ανεξάρτητο από τον controller** (παράγει references, δεν κινεί το ρομπότ):
+- **`footstep_planner.py`:** εναλλασσόμενα βήματα (left/right lanes), advance `step_length`/βήμα,
+  kinematic clamp `1.5·step_length`. Χτίζει το **timeline φάσεων** `DS_init → SS → DS → … → DS_final`
+  με ZMP endpoints ανά φάση (SS: στο stance foot· DS: ράμπα μεταξύ διαδοχικών stance feet).
+- **`fsm.py`:** `phase_at(t)` → φάση + progress `s∈[0,1]`, `support_mode` → ContactSet mode.
+- **`com_planner.py` (DCM):** `ω=√(g/z)`, `ξ=p+ṗ/ω`. **Backward** DCM recursion (ευσταθές)
+  `ξ[k]=p_zmp[k]+(ξ[k+1]−p_zmp[k])e^{−ωΔt}` με `ξ_end=p_zmp_end`, μετά **forward** CoM
+  `ṗ=ω(ξ−p)`. Κρατά το ZMP εντός support polygon εξ ορισμού.
+- **`swing_planner.py`:** smoothstep για xy (μηδενική ταχύτητα στα άκρα), `(1−cos)` bump για z
+  (μηδενική ταχύτητα σε lift-off/apex/touchdown).
+- **`walk_plan.py`:** orchestrator → `reference(t)` = {com, com_vel, zmp, support, swing_pos/vel}
+  (αυτό καταναλώνει το Στάδιο 4).
+- **Αποτέλεσμα (`scripts/03_plan_walk.py`):** 8 βήματα, 8.6 s, `ω=3.76`, CoM x: 0→1.15 m, lateral
+  sway ±0.08 m, swing apex 0.05 m, **ZMP-in-foot 8/8 SS**, DCM bounded (max|DCM−ZMP|=0.16 m).
+  → **PASS**. Plot: `logs/stage3_plan.png`.
 ### Στάδιο 4 — Δυναμική βάδιση σε flat ⏳ _(placeholder)_
 ### Στάδιο 5 — Robustness / push recovery ⏳ _(placeholder)_
 ### Στάδιο 6 — Κεκλιμένο επίπεδο ⏳ _(placeholder)_
@@ -157,6 +172,10 @@ Offline:  footsteps + ZMP reference
 | `env.gravity` | 9.81 | — |
 | `env.incline_deg` | 3.0 | αρχική κλίση (Στάδιο 6) |
 | `sim.control_rate_hz` | 1000 | ρυθμός-στόχος WBC QP (sim @ 500 Hz, ~490 Hz πραγματικό) |
+| `gait.n_steps` | 8 | πλήθος βημάτων |
+| `gait.step_length` | 0.15 m | advance/βήμα |
+| `gait.swing_apex` | 0.05 m | ύψος swing foot |
+| `gait.t_ss / t_ds` | 0.7 / 0.2 s | διάρκειες single / double support |
 
 ---
 
@@ -201,6 +220,19 @@ _TODO ανά στάδιο: flat walking (distance/duration/#steps), push recover
     το απότομο schedule έριχνε το ρομπότ (στενά πέλματα G1).
   - **Επαλήθευση:** stand/weight-shift/single-support όλα PASS, QP 100% feasible (Done όρος Σταδίου 2).
 
+- **2026-06-24 — Model: χέρια στις 90° στους αγκώνες:**
+  - Δεν ελέγχουμε τα χέρια· το keyframe `stand` άλλαξε ώστε `left/right_elbow_joint = 1.5708 rad`
+    (90°) και το posture task τα κρατά εκεί. `ctrl` του keyframe → 0 (torque actuators, neutral).
+  - Επαληθεύτηκε ότι το Στάδιο 2 εξακολουθεί να περνά με τη νέα στάση.
+- **2026-06-24 — Στάδιο 3 (planning layer):**
+  - Νέα modules: `footstep_planner.py`, `fsm.py`, `com_planner.py` (DCM), `swing_planner.py`,
+    `walk_plan.py`. Όλες οι gait παράμετροι στο `params.yaml`.
+  - **Απόφαση:** DCM (capture-point) αντί απλού LIPM preview — κλειστού-τύπου ανά βήμα + καθαρό
+    feedback, ιδανικό για push recovery (Στάδιο 5). Backward recursion για ευστάθεια.
+  - **Απόφαση:** ZMP στο stance foot (SS) και ράμπα στο DS → πάντα εντός support polygon.
+  - **Επαλήθευση:** plots (footsteps/CoM/DCM/ZMP, swing height), ZMP-in-foot 8/8, DCM bounded
+    → PASS (Done όρος Σταδίου 3, χωρίς κίνηση ρομπότ).
+
 ## 10. Πώς τρέχει
 
 ```bash
@@ -211,7 +243,8 @@ python scripts/01_gravity_comp.py            # Στάδιο 1: gravity comp (hea
 python scripts/01_gravity_comp.py --viewer   # ίδιο με οπτικό παράθυρο
 python scripts/02_stand_balance.py           # Στάδιο 2: WBC stand/weight-shift/single-support
 python scripts/02_stand_balance.py --viewer  # ίδιο με οπτικό παράθυρο
-# (επόμενα scripts ανά στάδιο: 03_walk_flat.py, 04_walk_incline.py, ...)
+python scripts/03_plan_walk.py               # Στάδιο 3: planner (plots, χωρίς ρομπότ)
+# (επόμενα scripts ανά στάδιο: 03_walk_flat.py / 04_walk_incline.py)
 ```
 
 ---
