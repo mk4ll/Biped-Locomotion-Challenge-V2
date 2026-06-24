@@ -17,8 +17,8 @@
 torque actuators (όχι IK+PD). Ο planner (footsteps + DCM/ZMP) είναι ανεξάρτητος από τον controller.
 Όλη η balance-λογική εκφράζεται **ως προς τη βαρύτητα / την επιφάνεια** ώστε να γενικεύεται στην κλίση.
 
-**Κατάσταση:** Στάδια 0–5 ✅ (setup, gravity comp, WBC standing, DCM planner, **flat walking**,
-**push recovery**) · Στάδιο 6 (incline) ⏳ — βλ. §9 Changelog.
+**Κατάσταση:** Στάδια 0–6 ✅ (setup, gravity comp, WBC standing, DCM planner, flat walking,
+push recovery, **incline: stand 18° / walk 3°**) · Στάδιο 7 (παράδοση: video, polish) ⏳.
 
 ---
 
@@ -184,7 +184,21 @@ Offline:  footsteps + ZMP reference
 - **Αποτέλεσμα (`scripts/05_push_recovery.py`):** βάδιση με 3 ωθήσεις (50 N ±y, 100 N +x) → **καμία
   πτώση**, max lateral deviation 83 mm, ανάκαμψη σε 13 mm, ολοκλήρωση 0.90 m. → **PASS**.
   Plot: `logs/stage5_push_recovery.png`. (Ταχύτητα/κατεύθυνση παραμετροποιήσιμα μέσω `gait`.)
-### Στάδιο 6 — Κεκλιμένο επίπεδο ⏳ _(placeholder)_
+### Στάδιο 6 — Κεκλιμένο επίπεδο ✅ (το challenge)
+Η γενίκευση στην κλίση γίνεται χωρίς re-write, γιατί όλη η balance λογική είναι ως προς τη βαρύτητα/επιφάνεια:
+- **Friction cones στο surface frame:** το `R_surface = R_y(α)` περνά στο `friction_pyramid` ώστε
+  ο κώνος να είναι γύρω από τον **surface normal** (όχι world-z). Έτσι ο solver «ξέρει» τι εφαπτομενικές
+  δυνάμεις είναι εφικτές → δεν γλιστράει (όσο `tan α < μ`).
+- **Torso vertical w.r.t. gravity** (το orientation task κρατά `R_des=I`, όχι normal επιφάνειας).
+- **Feet flat on slope:** pre-tilt αστραγάλων κατά `α` (το 6D contact constraint κλειδώνει τον
+  προσανατολισμό, οπότε τα πέλματα πρέπει να ξεκινούν επίπεδα)· posture nominal ενημερωμένο αναλόγως·
+  swing foot `R_des=R_surface`. Footsteps/CoM ακολουθούν την κλίση (`z = x·tan α`).
+- **Αποτελέσματα (`scripts/06_walk_incline.py`):**
+  - **Standing: σταθερό έως ~18°** (tan 0.32 < μ=0.5, slip <2.3 mm) — επιβεβαιώνει τους
+    surface-frame friction cones.
+  - **Walking: ανηφορίζει σε ήπια κλίση 3°** (0.85 m, rise 44 mm), χωρίς ολίσθηση/πτώση. → **PASS**.
+  - Πάνω από ~4° η βάδιση αποτυγχάνει: ο horizontal-LIPM DCM planner δεν μοντελοποιεί τη συνιστώσα
+    βαρύτητας κατά μήκος της κλίσης (βλ. §11). Plot: `logs/stage6_walk_incline.png`.
 
 ---
 
@@ -227,7 +241,7 @@ Offline:  footsteps + ZMP reference
 | Walk plan (Στ.3) | ZMP-in-foot / DCM bounded | 8/8 / 0.16 m | `logs/stage3_plan.png` |
 | **Flat walking (Στ.4)** | **βήματα / απόσταση / track err** | **10 / 0.97 m / 35 mm** | `logs/stage4_walk_flat.png` |
 | **Push recovery (Στ.5)** | **max push lat/fwd** | **80 N / 200 N (100 ms)** | `logs/stage5_push_recovery.png` |
-| Incline (Στ.6) | max κλίση | _TODO_ | — |
+| **Incline (Στ.6)** | **stand / walk max** | **18° stand / 3° walk** | `logs/stage6_walk_incline.png` |
 
 ---
 
@@ -303,6 +317,14 @@ Offline:  footsteps + ZMP reference
   - **Εύρημα:** έντονη ασυμμετρία: forward ~200 N, backward ασθενές (γεωμετρία πέλματος).
   - **Επαλήθευση:** 3 ωθήσεις χωρίς πτώση, recovery 83→13 mm → PASS (Done όρος Σταδίου 5).
 
+- **2026-06-24 — Στάδιο 6 (κεκλιμένο επίπεδο, το challenge):**
+  - `scripts/06_walk_incline.py` (stand/walk/sweep). Friction cones στο `R_surface`, feet pre-tilt,
+    slope-aware footsteps/CoM στον `WalkPlan` (`incline_rad`).
+  - **Insight:** το 6D contact constraint κλειδώνει τον προσανατολισμό του πέλματος → τα πέλματα
+    πρέπει να ξεκινούν επίπεδα στην κλίση (pre-tilt αστραγάλων + posture nominal).
+  - **Αποτέλεσμα:** standing έως 18° (surface-frame friction cones δουλεύουν), walking 3°.
+  - **Όριο:** incline walking >4° απαιτεί slope-projected DCM (μελλοντική δουλειά, §11).
+
 ## 10. Πώς τρέχει
 
 ```bash
@@ -319,14 +341,22 @@ python scripts/04_walk_flat.py --viewer      # ίδιο με οπτικό παρ
 python scripts/05_push_recovery.py           # Στάδιο 5: push recovery (scheduled pushes)
 python scripts/05_push_recovery.py --viewer  # ίδιο με οπτικό παράθυρο
 python scripts/05_push_recovery.py --sweep   # εύρεση max ανεκτού push
-# (επόμενο script: 06_walk_incline.py)
+python scripts/06_walk_incline.py --deg 3    # Στάδιο 6: stand + walk σε 3° κλίση
+python scripts/06_walk_incline.py --sweep    # max γωνία standing
+python scripts/06_walk_incline.py --deg 8 --viewer   # στέκεται σε 8° (οπτικά)
 ```
 
 ---
 
 ## 11. Περιορισμοί & μελλοντική δουλειά
-- QP backend `quadprog` αντί `proxqp` (περιορισμός Windows). 
-- _TODO: συμπληρώνεται._
+- **Incline walking ≤ ~3°.** Ο DCM/LIPM planner είναι οριζόντιος (σταθερό CoM height frame) και δεν
+  μοντελοποιεί τη συνιστώσα βαρύτητας κατά μήκος της κλίσης· για ανηφορική βάδιση σε μεγαλύτερες
+  γωνίες χρειάζεται **slope-projected LIPM/DCM** ή MPC. Το **standing** όμως φτάνει 18°.
+- **Push recovery ασύμμετρο**: ασθενές προς τα πίσω (γεωμετρία πέλματος, 0.05 m heel vs 0.12 m toe).
+- **QP backend `quadprog`** αντί `proxqp` (δεν χτίζεται σε Windows) — ίδια μέθοδος, άλλο backend.
+- **Feet pre-tilt για κλίση**: το 6D contact constraint δεν αφήνει το πέλμα να conform δυναμικά·
+  εναλλακτικά θα μπορούσε contact constraint που αφήνει ελεύθερο το pitch (compliant foot).
+- Χωρίς angular-momentum task (προαιρετικό Στ.5) — θα βελτίωνε περαιτέρω το push recovery.
 
 ---
 

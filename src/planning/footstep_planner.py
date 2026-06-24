@@ -20,11 +20,17 @@ class FootstepPlanner:
         self.first_swing = g["first_swing"]
         self.max_step = 1.5 * self.step_length     # kinematic clamp
 
-    def plan(self, init_left, init_right):
-        """init_left/right: xyz of the two foot sites. Returns (footsteps, timeline)."""
+    def plan(self, init_left, init_right, tan_slope=0.0):
+        """init_left/right: xyz of the two foot sites. tan_slope: ground slope in +x.
+        Foot landing heights follow the slope: z(x) = x*tan_slope + z0.
+        Returns (footsteps, timeline)."""
         L = np.array(init_left, float)
         R = np.array(init_right, float)
-        ground_z = 0.5 * (L[2] + R[2])
+        # slope reference so the initial feet lie on the surface
+        z0 = 0.5 * (L[2] + R[2]) - 0.5 * (L[0] + R[0]) * tan_slope
+
+        def slope_z(x):
+            return x * tan_slope + z0
         feet = {"left": L.copy(), "right": R.copy()}
 
         footsteps = [
@@ -52,7 +58,7 @@ class FootstepPlanner:
             advance = min(self.step_length, self.max_step)
             target = feet[swing].copy()
             target[0] = feet[support][0] + advance         # step past the stance foot
-            target[2] = ground_z
+            target[2] = slope_z(target[0])                 # land on the slope
             # SS: ZMP sits at the support foot.
             t = add({"type": "SS", "dur": self.t_ss, "support": support,
                      "swing": swing, "swing_from": feet[swing].copy(),

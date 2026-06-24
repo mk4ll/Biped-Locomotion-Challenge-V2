@@ -65,6 +65,8 @@ class WalkingController:
         self.capture_max = cap.get("max_shift", 0.12)
         self._prev_support = None
         self._foot_offset = np.zeros(2)
+        # slope feedforward: forward CoM accel to counter gravity-along-slope (Stage 6)
+        self.slope_accel_ff = np.zeros(2)
 
         self.wbc = WBCQP(self.terms, params)
         self.gc = GravityCompensator(self.terms, mujoco.mj_getTotalmass(env.model),
@@ -88,7 +90,7 @@ class WalkingController:
         xi_dot_ref = w * (ref["dcm"] - ref["zmp"])
         xi_dot_cmd = xi_dot_ref + self.k_dcm * (ref["dcm"] - xi)
         p_zmp_cmd = xi - xi_dot_cmd / w
-        a_xy = w * w * (com[:2] - p_zmp_cmd)
+        a_xy = w * w * (com[:2] - p_zmp_cmd) + self.slope_accel_ff
         self.com_task.a_ref = np.array([a_xy[0], a_xy[1], 0.0])
         # xy error handled by a_ref above -> zero the PD error; z tracks height.
         self.com_task.p_ref = np.array([com[0], com[1], ref["com"][2]])
