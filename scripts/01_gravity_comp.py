@@ -30,9 +30,15 @@ def build():
              + params["model"]["feet"]["right"]["corners"])
     terms = ModelTerms(env.model, sites)
     total_mass = mujoco.mj_getTotalmass(env.model)
+    gp = params["gravity_comp"]
+    q_nom = env.data.qpos[[env.model.jnt_qposadr[env.model.dof_jntid[d]]
+                           for d in terms.act_dof]].copy()
     gc = GravityCompensator(terms, total_mass,
                             gravity=params["env"]["gravity"],
-                            reg=params["wbc"]["reg"]["force"])
+                            reg=params["wbc"]["reg"]["force"],
+                            q_nom=q_nom if gp.get("hold_posture") else None,
+                            hold_kp=gp.get("hold_kp", 0.0),
+                            hold_kd=gp.get("hold_kd", 0.0))
     return params, env, terms, gc
 
 

@@ -98,6 +98,11 @@ Offline:  footsteps + ZMP reference
   της άρθρωσης (π.χ. hip_pitch ±88, knee ±139, ankle ±50, wrist ±5 N·m). `meshdir` δείχνει στα
   assets του menagerie (no copy). Προστέθηκαν 4 **corner sites** ανά πέλμα για contact Jacobians.
 - **Scenes:** `scene_flat.xml` (επίπεδο), `scene_incline.xml` (κεκλιμένο plane, euler about-y).
+- **Στάση keyframe `stand`:** (α) **χέρια σε "δίσκο"** — βραχίονας κάτω, αντιβράχιο οριζόντιο
+  μπροστά, **90° στον αγκώνα** (`shoulder_pitch=0.1, elbow=-0.15`· σημείωση: το elbow≈0 του G1
+  είναι το διπλωμένο, ≈1.57 το ίσιο). (β) **bent-knee crouch** (`hip=-0.369, knee=0.914,
+  ankle=-0.527`, base z=0.728, CoM≈0.65 m, πέλματα επίπεδα) → φυσική βάδιση με ορατά
+  λυγισμένα γόνατα.
 - **Discovery (`scripts/00_inspect_model.py`):** `nq=36, nv=35, nu=29`· floating base = dof 0–5
   (μη ενεργοποιούμενα)· **ΟΛΟΙ οι actuators motor/torque** (gain=fixed, bias=none)· μάζα
   **33.34 kg** → βάρος **327 N**· base height 0.79 m. Frames: `pelvis`, `torso_link`,
@@ -184,6 +189,8 @@ Offline:  footsteps + ZMP reference
 | `tasks.orientation.{w,kp,kd}` | 20 / 80 / 18 | pelvis upright vs gravity |
 | `tasks.posture.{w,kp,kd}` | 1 / 20 / 8 | regularization προς keyframe |
 | `tasks.swing_foot.{w,kp,kd}` | 120 / 300 / 34 | swing foot (single/SS) |
+| `gravity_comp.hold_kp/kd` | 60 / 8 | posture-hold PD (κρατά crouch ακίνητη, Στ.1) |
+| keyframe knee | 0.914 rad | bent-knee crouch (φυσική βάδιση) |
 | `env.gravity` | 9.81 | — |
 | `env.incline_deg` | 3.0 | αρχική κλίση (Στάδιο 6) |
 | `sim.control_rate_hz` | 1000 | ρυθμός-στόχος WBC QP (sim @ 500 Hz, ~490 Hz πραγματικό) |
@@ -266,6 +273,15 @@ Offline:  footsteps + ZMP reference
   - **Απόφαση:** capture-point (Στάδιο 5 τεχνική) εισήχθη ήδη εδώ για robustness· θα επεκταθεί σε push
     recovery. Πιο γρήγορα/μικρά βήματα (`t_ss=0.5, step=0.10`).
   - **Επαλήθευση:** 10 βήματα, 0.97 m, χωρίς πτώση, QP 100% feasible → PASS (Done όρος Σταδίου 4).
+- **2026-06-24 — Model: "δίσκος" χέρια + bent-knee crouch (αίτημα χρήστη):**
+  - Χέρια: 90° στον αγκώνα, αντιβράχιο οριζόντιο μπροστά (βρέθηκε αριθμητικά: η γεωμετρία του G1
+    elbow είναι ανεστραμμένη — 0=διπλωμένο). 
+  - **Crouch keyframe** (knee=0.914) ώστε η βάδιση να έχει λυγισμένα γόνατα· κατά το walk τα γόνατα
+    flex 50°–67°. Σκέτο χαμήλωμα CoM δεν αρκούσε (το WBC γέρνει στο ισχίο αντί να λυγίσει γόνατο)
+    → χρειάστηκε bent-knee **posture nominal**.
+  - **Bug:** το open-loop gravity comp (Στ.1) αποκλίνει σε crouch (μη παθητικά ευσταθής στάση).
+    **Fix:** `hold_posture` joint-PD (ήδη στο spec) → κρατά την crouch ακίνητη (drift 1.7 mm).
+  - Επαληθεύτηκε ότι Στάδια 1/2/4 περνούν με τη νέα στάση.
 
 ## 10. Πώς τρέχει
 

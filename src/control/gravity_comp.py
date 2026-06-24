@@ -16,10 +16,20 @@ import numpy as np
 
 
 class GravityCompensator:
-    def __init__(self, terms, total_mass, gravity=9.81, reg=1e-6):
+    def __init__(self, terms, total_mass, gravity=9.81, reg=1e-6,
+                 q_nom=None, hold_kp=0.0, hold_kd=0.0):
         self.terms = terms
         self.weight = total_mass * gravity
         self.reg = reg
+        # Optional posture hold (Stage 1 'hold_posture'): a joint-space PD that
+        # keeps the robot in its nominal pose. Needed to hold a bent-knee crouch
+        # still (pure feedforward gravity comp would slowly drift there).
+        self.q_nom = q_nom
+        self.hold_kp = hold_kp
+        self.hold_kd = hold_kd
+        if q_nom is not None:
+            self.qadr = np.array([terms.model.jnt_qposadr[terms.model.dof_jntid[d]]
+                                  for d in terms.act_dof])
 
     def compute(self, data, active_site_ids=None):
         """Return (tau [nu], f [3*ncp]) holding the robot in static balance."""
@@ -45,6 +55,11 @@ class GravityCompensator:
         # Actuated rows give the joint torques.
         gen_contact = Jc.T @ f                             # (nv,)
         tau = (h - gen_contact)[T.act_dof]                 # (nu,)
+
+        if self.q_nom is not None and (self.hold_kp or self.hold_kd):
+            q = data.qpos[self.qadr]
+            dq = data.qvel[T.act_dof]
+            tau = tau + self.hold_kp * (self.q_nom - q) + self.hold_kd * (-dq)
         return tau, f
 
     def residual(self, data, tau, f, active_site_ids=None):

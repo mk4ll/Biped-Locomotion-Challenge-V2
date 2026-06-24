@@ -43,7 +43,9 @@ sim:
 # ---------------------------------------------------------------------
 gravity_comp:
   duration_s: 5.0
-  hold_posture: true           # also regularize toward keyframe posture
+  hold_posture: true           # add a joint-space PD to keep the (crouch) pose still
+  hold_kp: 60.0
+  hold_kd: 8.0
 
 # ---------------------------------------------------------------------
 # Stage 2: WBC QP  (filled in Stage 2)

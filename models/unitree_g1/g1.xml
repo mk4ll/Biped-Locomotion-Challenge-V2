@@ -354,9 +354,15 @@
   </sensor>
 
   <keyframe>
-    <!-- Arms parked with elbows at 90deg (1.5708 rad); we don't control the arms,
+    <!-- Arms parked in a "holding a tray" pose: upper arm down, forearm forward
+         horizontal, right angle at the elbow (shoulder_pitch=0.1, elbow=-0.15;
+         note G1 elbow~0 is folded, ~1.57 is straight). We don't control the arms;
          the posture task just holds this pose. ctrl=0 (torque actuators, neutral). -->
-    <key name="stand" qpos="0 0 0.79 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.2 0.2 0 1.5708 0 0 0 0.2 -0.2 0 1.5708 0 0 0"
+    <!-- Bent-knee athletic crouch (hip_pitch=-0.369, knee=0.914, ankle_pitch=-0.527):
+         lowers CoM to ~0.65 m, feet flat (corner spread <3mm, no penetration),
+         statically balanced. Gives a natural walk with visibly flexed knees.
+         Base z=0.7279 so it starts in this pose. -->
+    <key name="stand" qpos="0 0 0.7279 1 0 0 0 -0.369 0 0 0.914 -0.527 0 -0.369 0 0 0.914 -0.527 0 0 0 0 0.1 0.1 0 -0.15 0 0 0 0.1 -0.1 0 -0.15 0 0 0"
       ctrl="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
   </keyframe>
 </mujoco>
