@@ -1,0 +1,65 @@
+# =====================================================================
+# params.yaml  --  SINGLE source of all parameters (no hardcoded values)
+# G1 dynamic walking, torque-level Whole-Body Control (MuJoCo).
+# Populated/expanded per stage. See README.md Section 7 for rationale.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Model / environment
+# ---------------------------------------------------------------------
+model:
+  scene_flat: "models/unitree_g1/scene_flat.xml"
+  scene_incline: "models/unitree_g1/scene_incline.xml"
+  keyframe: "stand"            # initial qpos/ctrl keyframe in g1.xml
+
+  # Frame / site names  (DISCOVERED from the model in Stage 0, not assumed)
+  base_body: "pelvis"
+  floating_joint: "floating_base_joint"
+  torso_body: "torso_link"
+  imu_site: "imu_in_pelvis"
+
+  feet:
+    left:
+      site: "left_foot"
+      corners: ["left_foot_hl", "left_foot_hr", "left_foot_tl", "left_foot_tr"]
+    right:
+      site: "right_foot"
+      corners: ["right_foot_hl", "right_foot_hr", "right_foot_tl", "right_foot_tr"]
+
+env:
+  gravity: 9.81
+  incline_deg: 3.0            # Stage 6: kept in sync with scene_incline.xml euler
+
+# ---------------------------------------------------------------------
+# Simulation
+# ---------------------------------------------------------------------
+sim:
+  control_rate_hz: 1000        # WBC QP solve rate (~1 kHz)
+  realtime: true
+  viewer: true
+
+# ---------------------------------------------------------------------
+# Stage 1: gravity compensation / dynamics plumbing
+# ---------------------------------------------------------------------
+gravity_comp:
+  duration_s: 5.0
+  hold_posture: true           # also regularize toward keyframe posture
+
+# ---------------------------------------------------------------------
+# Stage 2: WBC QP  (filled in Stage 2)
+# ---------------------------------------------------------------------
+wbc:
+  friction_mu: 0.6             # matches foot geom friction
+  f_min: 10.0                  # min normal force per contact [N]
+  solver: "quadprog"           # qpsolvers backend (Windows wheel; proxqp unavailable on Win)
+  solver_fallback: "osqp"      # used if primary returns infeasible
+  reg:
+    qddot: 1.0e-6
+    torque: 1.0e-6
+    force: 1.0e-6
+  tasks: {}                    # gains/weights added in Stage 2
+
+# ---------------------------------------------------------------------
+# Stage 3-4: planner / gait  (filled later)
+# ---------------------------------------------------------------------
+gait: {}
