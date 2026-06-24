@@ -17,7 +17,8 @@
 torque actuators (όχι IK+PD). Ο planner (footsteps + DCM/ZMP) είναι ανεξάρτητος από τον controller.
 Όλη η balance-λογική εκφράζεται **ως προς τη βαρύτητα / την επιφάνεια** ώστε να γενικεύεται στην κλίση.
 
-**Κατάσταση:** Στάδιο 0 (setup) ✅ · Στάδιο 1 (gravity comp) ⏳ — βλ. §9 Changelog.
+**Κατάσταση:** Στάδια 0–4 ✅ (setup, gravity comp, WBC standing, DCM planner, **flat walking 10 βήματα**)
+· Στάδια 5 (push recovery) & 6 (incline) ⏳ — βλ. §9 Changelog.
 
 ---
 
@@ -149,7 +150,21 @@ Offline:  footsteps + ZMP reference
 - **Αποτέλεσμα (`scripts/03_plan_walk.py`):** 8 βήματα, 8.6 s, `ω=3.76`, CoM x: 0→1.15 m, lateral
   sway ±0.08 m, swing apex 0.05 m, **ZMP-in-foot 8/8 SS**, DCM bounded (max|DCM−ZMP|=0.16 m).
   → **PASS**. Plot: `logs/stage3_plan.png`.
-### Στάδιο 4 — Δυναμική βάδιση σε flat ⏳ _(placeholder)_
+### Στάδιο 4 — Δυναμική βάδιση σε flat ✅
+- **`src/control/walking_controller.py`:** δένει planner → WBC. Ανά step: `reference(t)` → CoM/swing
+  targets + contact mode → WBC solve → torques. Επαναχρησιμοποιείται σε Στάδια 5/6.
+- **CoM command (DCM feedback):** αντί position-PD, xy μέσω `ξ=com+v/ω`,
+  `ξ̇_cmd=ξ̇_ref+k_dcm(ξ_ref−ξ)`, `p_zmp_cmd=ξ−ξ̇_cmd/ω`, `a_com=ω²(com−p_zmp_cmd)`· z με PD ύψους.
+  Σταθεροποιεί το ασταθές DCM mode (το καθαρό position-PD αποκλίνει).
+- **Capture-point foot placement:** στην αρχή κάθε SS, μετατόπιση landing swing foot κατά
+  `clip(gain·(ξ_meas−ξ_ref))` (ramp-in με το progress) → «πιάνει» την πλευρική απόκλιση. Καθοριστικό
+  για τα **στενά πέλματα** του G1 (CoP authority ±0.03 m, `e^{ω·t_ss}≈12×` divergence/βήμα).
+- **Swing foot 6D:** θέση (spline) + προσανατολισμός (επίπεδο πέλμα) → καθαρή επαφή στο touchdown.
+- **Contact-set management:** SS → stance foot 6D constraint + friction μόνο εκεί· swing foot εκτός·
+  στο DS επανεντάσσονται και τα δύο.
+- **Tuning:** `t_ss=0.5, t_ds=0.15, step=0.10` (πιο γρήγορα/μικρά βήματα → λιγότερη ανά-βήμα divergence).
+- **Αποτέλεσμα (`scripts/04_walk_flat.py`):** **10 βήματα, 7.9 s, 0.97 m**, χωρίς πτώση, CoM track err
+  35 mm (max 57), QP 100% feasible, max|τ| 40 N·m. → **PASS**. Plot: `logs/stage4_walk_flat.png`.
 ### Στάδιο 5 — Robustness / push recovery ⏳ _(placeholder)_
 ### Στάδιο 6 — Κεκλιμένο επίπεδο ⏳ _(placeholder)_
 
@@ -175,14 +190,24 @@ Offline:  footsteps + ZMP reference
 | `gait.n_steps` | 8 | πλήθος βημάτων |
 | `gait.step_length` | 0.15 m | advance/βήμα |
 | `gait.swing_apex` | 0.05 m | ύψος swing foot |
-| `gait.t_ss / t_ds` | 0.7 / 0.2 s | διάρκειες single / double support |
+| `gait.t_ss / t_ds` | 0.5 / 0.15 s | διάρκειες single / double support |
+| `gait.step_length` (Στ.4) | 0.10 m | μικρότερο βήμα για ευστάθεια |
+| `tasks.com.k_dcm` | 3.0 | DCM feedback gain (xy) |
+| `capture.gain / max_shift` | 1.0 / 0.12 m | capture-point step adjustment |
+| `tasks.swing_foot.kp_ori` | 150 | swing foot flat (orientation) |
 
 ---
 
 ## 8. Πειράματα & Αποτελέσματα
 
-_TODO ανά στάδιο: flat walking (distance/duration/#steps), push recovery, max κλίση. Γραφήματα
-από `logs/`._
+| Πείραμα | Μετρική | Αποτέλεσμα | Plot |
+|---|---|---|---|
+| Gravity comp (Στ.1) | base drift / residual | 1.6 mm / 2.3e-4 | `logs/stage1_gravity_comp.png` |
+| Standing balance (Στ.2) | weight-shift / single support | CoM 111 mm / foot airborne | `logs/stage2_stand_balance.png` |
+| Walk plan (Στ.3) | ZMP-in-foot / DCM bounded | 8/8 / 0.16 m | `logs/stage3_plan.png` |
+| **Flat walking (Στ.4)** | **βήματα / απόσταση / track err** | **10 / 0.97 m / 35 mm** | `logs/stage4_walk_flat.png` |
+| Push recovery (Στ.5) | — | _TODO_ | — |
+| Incline (Στ.6) | max κλίση | _TODO_ | — |
 
 ---
 
@@ -233,6 +258,15 @@ _TODO ανά στάδιο: flat walking (distance/duration/#steps), push recover
   - **Επαλήθευση:** plots (footsteps/CoM/DCM/ZMP, swing height), ZMP-in-foot 8/8, DCM bounded
     → PASS (Done όρος Σταδίου 3, χωρίς κίνηση ρομπότ).
 
+- **2026-06-24 — Στάδιο 4 (δυναμική βάδιση flat):**
+  - Νέο `src/control/walking_controller.py` (planner↔WBC). FootTask επεκτάθηκε σε 6D (θέση+orientation).
+  - **Bug/insight:** καθαρό CoM position-PD → πλευρική απόκλιση & πτώση στο ~4ο βήμα (ασταθές DCM mode).
+    **Fix:** DCM feedback law για a_com (xy) + **capture-point foot placement**. Χωρίς αυτά, τα στενά
+    πέλματα του G1 δεν έχουν αρκετή CoP authority.
+  - **Απόφαση:** capture-point (Στάδιο 5 τεχνική) εισήχθη ήδη εδώ για robustness· θα επεκταθεί σε push
+    recovery. Πιο γρήγορα/μικρά βήματα (`t_ss=0.5, step=0.10`).
+  - **Επαλήθευση:** 10 βήματα, 0.97 m, χωρίς πτώση, QP 100% feasible → PASS (Done όρος Σταδίου 4).
+
 ## 10. Πώς τρέχει
 
 ```bash
@@ -244,7 +278,9 @@ python scripts/01_gravity_comp.py --viewer   # ίδιο με οπτικό παρ
 python scripts/02_stand_balance.py           # Στάδιο 2: WBC stand/weight-shift/single-support
 python scripts/02_stand_balance.py --viewer  # ίδιο με οπτικό παράθυρο
 python scripts/03_plan_walk.py               # Στάδιο 3: planner (plots, χωρίς ρομπότ)
-# (επόμενα scripts ανά στάδιο: 03_walk_flat.py / 04_walk_incline.py)
+python scripts/04_walk_flat.py               # Στάδιο 4: δυναμική βάδιση σε flat
+python scripts/04_walk_flat.py --viewer      # ίδιο με οπτικό παράθυρο
+# (επόμενα scripts ανά στάδιο: 05_push_recovery.py / 06_walk_incline.py)
 ```
 
 ---

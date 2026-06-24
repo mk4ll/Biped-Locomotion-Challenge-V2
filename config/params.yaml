@@ -61,8 +61,9 @@ wbc:
   tasks:
     com:
       weight: 100.0
-      kp: 100.0
+      kp: 100.0               # height (z) PD only; xy uses DCM feedback law
       kd: 20.0
+      k_dcm: 3.0              # DCM feedback gain (xy): xi_dot_cmd = xi_dot_ref + k(xi_ref-xi)
       height: null            # null => use nominal CoM height from keyframe
     orientation:              # pelvis/torso upright w.r.t. gravity
       weight: 20.0
@@ -76,6 +77,14 @@ wbc:
       weight: 120.0
       kp: 300.0
       kd: 34.0
+      kp_ori: 150.0           # keep the swing foot flat (lands flat, clean contact)
+      kd_ori: 24.0
+
+# Capture-point foot placement (DCM-based step adjustment, Stage 4/5)
+capture:
+  enabled: true
+  gain: 1.0                   # foot shift = gain * (xi_measured - xi_ref) at SS start
+  max_shift: 0.12             # clip lateral/sagittal shift [m]
 
 # ---------------------------------------------------------------------
 # Stage 2: standing-balance demo schedule
@@ -93,12 +102,12 @@ stand_balance:
 # Stage 3-4: planner / gait
 # ---------------------------------------------------------------------
 gait:
-  n_steps: 8                  # number of walking steps
-  step_length: 0.15           # forward advance per step [m]
+  n_steps: 10                 # number of walking steps
+  step_length: 0.10           # forward advance per step [m]
   step_width: null            # null => use nominal foot separation from the model
   swing_apex: 0.05            # swing-foot peak height [m]
-  t_ss: 0.7                   # single-support duration [s]
-  t_ds: 0.2                   # double-support duration [s]
+  t_ss: 0.5                   # single-support duration [s] (shorter => less DCM divergence)
+  t_ds: 0.15                  # double-support duration [s]
   t_ds_init: 0.6              # initial settle (double support) [s]
   t_ds_final: 0.8             # final settle [s]
   first_swing: "right"        # which foot swings first

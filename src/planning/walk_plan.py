@@ -34,8 +34,10 @@ class WalkPlan:
         com = np.array([self.traj["com"][i, 0], self.traj["com"][i, 1], self.z])
         com_vel = np.array([self.traj["com_vel"][i, 0], self.traj["com_vel"][i, 1], 0.0])
         zmp = self.traj["zmp"][i].copy()
+        dcm = self.traj["dcm"][i].copy()
         ph, s = phase_at(self.timeline, t)
-        ref = {"com": com, "com_vel": com_vel, "zmp": zmp,
+        ref = {"com": com, "com_vel": com_vel, "zmp": zmp, "dcm": dcm,
+               "omega": self.traj["omega"], "progress": s,
                "support": ph["support"], "phase": ph["type"],
                "swing": ph["swing"], "swing_pos": None, "swing_vel": None}
         if ph["type"] == "SS":

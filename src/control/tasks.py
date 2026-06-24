@@ -92,19 +92,39 @@ class PostureTask:
 
 
 class FootTask:
-    """Track a foot site world position (used for the swing foot in single support)."""
+    """Track a swing-foot pose: 3D position + (optionally) keep the foot flat.
 
-    def __init__(self, terms, site_id, kp, kd, weight):
+    With track_orientation=True the task is 6D ([lin; ang]) and holds the foot
+    orientation at R_des (default = the foot's nominal/flat orientation), so the
+    swing foot lands flat instead of on an edge.
+    """
+
+    def __init__(self, terms, site_id, kp, kd, weight,
+                 track_orientation=False, kp_ori=None, kd_ori=None, R_des=None):
         self.terms = terms
         self.site = site_id
         self.kp, self.kd, self.weight = kp, kd, weight
+        self.track_ori = track_orientation
+        self.kp_ori = kp if kp_ori is None else kp_ori
+        self.kd_ori = kd if kd_ori is None else kd_ori
+        self.R_des = R_des
         self.p_ref = np.zeros(3)
         self.v_ref = np.zeros(3)
         self.a_ref = np.zeros(3)
 
     def compute(self, data):
-        J = self.terms.site_jacobian(data, self.site)
         p = data.site_xpos[self.site].copy()
-        v = J @ data.qvel
-        a_des = self.a_ref + self.kp * (self.p_ref - p) + self.kd * (self.v_ref - v)
-        return J, a_des, self.weight
+        if not self.track_ori:
+            J = self.terms.site_jacobian(data, self.site)
+            v = J @ data.qvel
+            a_des = self.a_ref + self.kp * (self.p_ref - p) + self.kd * (self.v_ref - v)
+            return J, a_des, self.weight
+        # 6D: position + orientation
+        J6 = self.terms.site_jacobian6(data, self.site)         # [lin; ang]
+        v6 = J6 @ data.qvel
+        a_lin = self.a_ref + self.kp * (self.p_ref - p) + self.kd * (self.v_ref - v6[:3])
+        R = data.site_xmat[self.site].reshape(3, 3)
+        R_des = R if self.R_des is None else self.R_des
+        e_ang = orientation_error(R, R_des)
+        a_ang = self.kp_ori * e_ang + self.kd_ori * (-v6[3:])
+        return J6, np.concatenate([a_lin, a_ang]), self.weight
