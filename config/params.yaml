@@ -89,6 +89,19 @@ capture:
   max_shift: 0.12             # clip lateral/sagittal shift [m]
 
 # ---------------------------------------------------------------------
+# Stage 5: push-recovery test
+# ---------------------------------------------------------------------
+push:
+  duration_s: 0.10            # push pulse length
+  # scheduled pushes during the walk: [time_s, fx, fy, fz] (world-frame force, N)
+  schedule:
+    - [1.8, 0.0, 50.0, 0.0]    # lateral (+y)
+    - [3.4, 100.0, 0.0, 0.0]   # forward (+x)
+    - [5.0, 0.0, -50.0, 0.0]   # lateral (-y)
+  sweep_axis: "y"             # axis for the magnitude sweep
+  sweep_forces: [40, 60, 80, 100, 120]   # N (0.1 s pulses)
+
+# ---------------------------------------------------------------------
 # Stage 2: standing-balance demo schedule
 # ---------------------------------------------------------------------
 stand_balance:

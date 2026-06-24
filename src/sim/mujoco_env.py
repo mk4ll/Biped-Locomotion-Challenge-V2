@@ -53,6 +53,15 @@ class MujocoEnv:
         mujoco.mj_step(self.model, self.data)
         return self.data
 
+    def apply_external_force(self, body_id, force_world, torque_world=None):
+        """Apply an external wrench (world frame) on a body via xfrc_applied."""
+        self.data.xfrc_applied[body_id, :3] = force_world
+        if torque_world is not None:
+            self.data.xfrc_applied[body_id, 3:] = torque_world
+
+    def clear_external_forces(self):
+        self.data.xfrc_applied[:] = 0.0
+
     @property
     def dt(self) -> float:
         return self.model.opt.timestep

@@ -98,9 +98,11 @@ class WalkingController:
         tasks = [self.com_task, self.ori_task, self.pos_task]
         # swing foot task (only while a foot is airborne)
         if ref["phase"] == "SS" and ref["swing"] is not None:
-            # Capture-point step adjustment: on entering a new SS, shift the swing
-            # foot landing by gain*(xi_measured - xi_ref) to catch DCM divergence.
-            if self.capture_enabled and ref["support"] != self._prev_support:
+            # Capture-point step adjustment: shift the swing-foot landing by
+            # gain*(xi_measured - xi_ref). Updated CONTINUOUSLY through the SS so a
+            # mid-step push is corrected immediately (not one step late). Ramped by
+            # phase progress so it starts from the current foot pose (no jump).
+            if self.capture_enabled:
                 xi_meas = com[:2] + com_vel[:2] / w
                 off = self.capture_gain * (xi_meas - ref["dcm"])
                 self._foot_offset = np.clip(off, -self.capture_max, self.capture_max)

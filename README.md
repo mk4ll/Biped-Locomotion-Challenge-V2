@@ -17,8 +17,8 @@
 torque actuators (όχι IK+PD). Ο planner (footsteps + DCM/ZMP) είναι ανεξάρτητος από τον controller.
 Όλη η balance-λογική εκφράζεται **ως προς τη βαρύτητα / την επιφάνεια** ώστε να γενικεύεται στην κλίση.
 
-**Κατάσταση:** Στάδια 0–4 ✅ (setup, gravity comp, WBC standing, DCM planner, **flat walking 10 βήματα**)
-· Στάδια 5 (push recovery) & 6 (incline) ⏳ — βλ. §9 Changelog.
+**Κατάσταση:** Στάδια 0–5 ✅ (setup, gravity comp, WBC standing, DCM planner, **flat walking**,
+**push recovery**) · Στάδιο 6 (incline) ⏳ — βλ. §9 Changelog.
 
 ---
 
@@ -170,7 +170,20 @@ Offline:  footsteps + ZMP reference
 - **Tuning:** `t_ss=0.5, t_ds=0.15, step=0.10` (πιο γρήγορα/μικρά βήματα → λιγότερη ανά-βήμα divergence).
 - **Αποτέλεσμα (`scripts/04_walk_flat.py`):** **10 βήματα, 7.9 s, 0.97 m**, χωρίς πτώση, CoM track err
   35 mm (max 57), QP 100% feasible, max|τ| 40 N·m. → **PASS**. Plot: `logs/stage4_walk_flat.png`.
-### Στάδιο 5 — Robustness / push recovery ⏳ _(placeholder)_
+### Στάδιο 5 — Robustness / push recovery ✅
+- **Push στο sim:** `MujocoEnv.apply_external_force` → wrench στο pelvis (`xfrc_applied`) για ~100 ms.
+- **Μηχανισμός ανάκαμψης:** το **capture-point foot placement** (συνεχής ενημέρωση κατά το SS):
+  `foot_offset = clip(gain·(ξ_meas − ξ_ref))`. Μια ώθηση μετατοπίζει το μετρούμενο `ξ`, οπότε το
+  swing foot προσγειώνεται προς την κατεύθυνση της ώθησης και «πιάνει» την πτώση.
+- **Κρίσιμη βελτίωση:** η ενημέρωση του capture έγινε **συνεχής** (όχι μόνο στην αρχή του SS) — αλλιώς
+  μια ώθηση στη μέση του βήματος αντιδρά με ~1 βήμα καθυστέρηση και το ρομπότ πέφτει.
+- **Envelope ανοχής (single 100 ms push):**
+  - Lateral (±y): **~80 N / 8 N·s** (Δv≈0.24 m/s) σε ευνοϊκή φάση· ~50 N robust σε όλες τις φάσεις.
+  - Forward (+x): **~200 N / 20 N·s** (μεγάλη ανοχή — μακρύ πέλμα μπροστά).
+  - Backward (−x): ασθενές (το πέλμα εκτείνεται 0.12 m μπροστά αλλά 0.05 m πίσω → λίγη CoP authority).
+- **Αποτέλεσμα (`scripts/05_push_recovery.py`):** βάδιση με 3 ωθήσεις (50 N ±y, 100 N +x) → **καμία
+  πτώση**, max lateral deviation 83 mm, ανάκαμψη σε 13 mm, ολοκλήρωση 0.90 m. → **PASS**.
+  Plot: `logs/stage5_push_recovery.png`. (Ταχύτητα/κατεύθυνση παραμετροποιήσιμα μέσω `gait`.)
 ### Στάδιο 6 — Κεκλιμένο επίπεδο ⏳ _(placeholder)_
 
 ---
@@ -213,7 +226,7 @@ Offline:  footsteps + ZMP reference
 | Standing balance (Στ.2) | weight-shift / single support | CoM 111 mm / foot airborne | `logs/stage2_stand_balance.png` |
 | Walk plan (Στ.3) | ZMP-in-foot / DCM bounded | 8/8 / 0.16 m | `logs/stage3_plan.png` |
 | **Flat walking (Στ.4)** | **βήματα / απόσταση / track err** | **10 / 0.97 m / 35 mm** | `logs/stage4_walk_flat.png` |
-| Push recovery (Στ.5) | — | _TODO_ | — |
+| **Push recovery (Στ.5)** | **max push lat/fwd** | **80 N / 200 N (100 ms)** | `logs/stage5_push_recovery.png` |
 | Incline (Στ.6) | max κλίση | _TODO_ | — |
 
 ---
@@ -283,6 +296,13 @@ Offline:  footsteps + ZMP reference
     **Fix:** `hold_posture` joint-PD (ήδη στο spec) → κρατά την crouch ακίνητη (drift 1.7 mm).
   - Επαληθεύτηκε ότι Στάδια 1/2/4 περνούν με τη νέα στάση.
 
+- **2026-06-24 — Στάδιο 5 (push recovery):**
+  - `MujocoEnv.apply_external_force` (pelvis xfrc) + `scripts/05_push_recovery.py` (scheduled + sweep).
+  - **Bug/insight:** capture-point μόνο στην αρχή του SS → ~1 βήμα καθυστέρηση → πτώση ακόμη και σε
+    60 N. **Fix:** συνεχής ενημέρωση του foot_offset κατά το SS → ανάκαμψη έως ~80 N lateral.
+  - **Εύρημα:** έντονη ασυμμετρία: forward ~200 N, backward ασθενές (γεωμετρία πέλματος).
+  - **Επαλήθευση:** 3 ωθήσεις χωρίς πτώση, recovery 83→13 mm → PASS (Done όρος Σταδίου 5).
+
 ## 10. Πώς τρέχει
 
 ```bash
@@ -296,7 +316,10 @@ python scripts/02_stand_balance.py --viewer  # ίδιο με οπτικό παρ
 python scripts/03_plan_walk.py               # Στάδιο 3: planner (plots, χωρίς ρομπότ)
 python scripts/04_walk_flat.py               # Στάδιο 4: δυναμική βάδιση σε flat
 python scripts/04_walk_flat.py --viewer      # ίδιο με οπτικό παράθυρο
-# (επόμενα scripts ανά στάδιο: 05_push_recovery.py / 06_walk_incline.py)
+python scripts/05_push_recovery.py           # Στάδιο 5: push recovery (scheduled pushes)
+python scripts/05_push_recovery.py --viewer  # ίδιο με οπτικό παράθυρο
+python scripts/05_push_recovery.py --sweep   # εύρεση max ανεκτού push
+# (επόμενο script: 06_walk_incline.py)
 ```
 
 ---
