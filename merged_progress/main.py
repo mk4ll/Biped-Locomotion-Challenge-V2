@@ -57,8 +57,18 @@ TASKS = [
     ("b", "Full evaluation battery (all scenarios -> report)",
      ["scripts/evaluate.py"], False, False,
      "Runs everything headless, writes logs/eval_report.md. All scenarios PASS (G1)."),
+    ("c", "FUN: Waiter -- navigate around tables holding a tray + frappe",
+     ["scripts/run_navigate.py", "--seed", "1"], True, True,
+     "Robot plans a path around random tables, delivers a frappe; tray stays level."),
+    ("d", "FUN: Sisyphus -- push a boulder up an incline",
+     ["scripts/run_sisyphus.py", "--angle", "5"], True, True,
+     "Robot walks up a slope shoving a boulder ahead of it (+1.3 m / +12 cm uphill)."),
 ]
 TASK_BY_KEY = {t[0]: t[1:] for t in TASKS}
+SPEED_PRESETS = {"slow": 0.10, "normal": 0.16, "fast": 0.20}   # step length [m]
+SPEED_ORDER = ["normal", "slow", "fast"]
+# tasks whose speed (step length) the [s] toggle controls (run_walk --step-len)
+SPEED_TASKS = {"5", "6"}
 
 
 def getkey():
@@ -79,7 +89,7 @@ def getkey():
         return ch
 
 
-def menu(viewer, robot):
+def menu(viewer, robot, speed):
     print("\n" + "=" * 72)
     print(f"  Unitree {robot.upper()} — Merged Locomotion  (torque WBC + DCM)")
     print("=" * 72)
@@ -87,14 +97,15 @@ def menu(viewer, robot):
         tag = ("  [viewer]" if vw else "") + ("  [robot]" if rb else "")
         print(f"  [{k}]  {title}{tag}")
     print("-" * 72)
-    print(f"  [v]  toggle viewer   (now: {'ON' if viewer else 'OFF'})    "
-          f"[r]  toggle robot   (now: {robot.upper()})")
+    print(f"  [v] viewer: {'ON ' if viewer else 'OFF'}   "
+          f"[r] robot: {robot.upper():5s}   "
+          f"[s] speed: {speed} ({SPEED_PRESETS[speed]:.2f} m)")
     print("  [ESC / q]  exit")
     print("=" * 72)
     print("Press a key...")
 
 
-def run_task(key, viewer, robot):
+def run_task(key, viewer, robot, speed):
     title, cmd, supports_vw, supports_rb, see = TASK_BY_KEY[key]
     args = list(cmd)
     if viewer and supports_vw:
@@ -103,6 +114,8 @@ def run_task(key, viewer, robot):
         args += ["--robot", robot]
     elif robot != "g1":
         print(f"\n(note: task '{title}' is G1-only; running on G1.)")
+    if key in SPEED_TASKS:
+        args += ["--step-len", f"{SPEED_PRESETS[speed]:.3f}"]
     print("\n" + "-" * 72)
     print(f"RUN [{robot.upper()}]: {title}")
     print(f"WHAT YOU SHOULD SEE: {see}")
@@ -119,8 +132,9 @@ def run_task(key, viewer, robot):
 def main():
     viewer = False
     robot = "g1"
+    speed = "normal"
     while True:
-        menu(viewer, robot)
+        menu(viewer, robot, speed)
         ch = getkey()
         if ch in ("\x1b", "q", "Q"):
             print("bye.")
@@ -131,8 +145,11 @@ def main():
         if ch in ("r", "R"):
             robot = "talos" if robot == "g1" else "g1"
             continue
+        if ch in ("s", "S"):
+            speed = SPEED_ORDER[(SPEED_ORDER.index(speed) + 1) % len(SPEED_ORDER)]
+            continue
         if ch in TASK_BY_KEY:
-            run_task(ch, viewer, robot)
+            run_task(ch, viewer, robot, speed)
         # any other key: just redraw the menu
 
 

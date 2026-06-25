@@ -28,7 +28,10 @@
 | Evaluation harness | ❌ | ✅ +GIFs | ✅ |
 | Θεωρητική ανάλυση (slip/tip) | ✅ | ❌ | ✅ |
 | **Lecture-style plots** (path/footsteps/CoM height) | μερικά | ❌ | ✅ |
-| Tray-pose χέρια (δίσκος) | ✅ | ❌ | ✅ |
+| Tray-pose χέρια (δίσκος) | ✅ | ❌ | ✅ (G1+Talos) |
+| Επιλογή ταχύτητας (slow/normal/fast) | ❌ | ❌ | ✅ |
+| 🍽 FUN: σερβιτόρος (navigation + φραπέ) | ❌ | ❌ | ✅ |
+| 🪨 FUN: Σίσυφος (βράχος σε κλίση) | ❌ | ❌ | ✅ |
 
 ## Σύγκριση (+ / −)
 
