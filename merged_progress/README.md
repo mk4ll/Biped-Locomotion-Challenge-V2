@@ -66,9 +66,21 @@ swing feet aligned to normal) — η κύρια συνεισφορά που υι
 
 ## 4. Πώς τρέχει
 
+### Διαδραστικό μενού (συνιστάται)
 ```bash
-pip install -r requirements.txt            # mujoco, numpy, scipy, qpsolvers, quadprog, osqp, clarabel
+pip install -r requirements.txt
+python main.py        # μενού: πάτα [1]..[b] για task, [v] viewer on/off, [ESC] έξοδος
+```
+Κάθε task τρέχει σε **απομονωμένο subprocess** (robust: σφάλμα σε ένα δεν ρίχνει το μενού)
+και τυπώνει «τι θα δεις». Με `[v]` ανοίγεις τον ζωντανό MuJoCo viewer.
 
+### Ταχύτητα βάδισης
+- **~0.11 m/s** μέση (καθαρή απόσταση / συνολικό χρόνο)· **~0.15 m/s** σταθερό forward
+  κατά τη συνεχή βάδιση (`step_length/T_step = 0.10/0.65`)· peak CoM ~0.38 m/s (με το sway).
+- Ρυθμίζεται από `gait.step_length` / `t_ss` στο `config/params.yaml`, ή `vx` στο `run_omni.py`.
+
+### Απευθείας scripts
+```bash
 # Stage-by-stage (η ραχοκοκαλιά της λογικής)
 python scripts/00_inspect_model.py         # DOF, actuators (torque), frames
 python scripts/01_gravity_comp.py          # dynamics sanity (gravity comp)
