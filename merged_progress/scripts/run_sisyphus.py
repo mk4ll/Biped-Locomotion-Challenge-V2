@@ -57,13 +57,37 @@ def boulder_decorator(angle_rad, x0, radius, mass):
     return deco
 
 
-def run(angle_deg=6.0, mass=2.0, radius=0.12, robot="g1", viewer=False):
+# extended-arms-forward pose (to push a big ball at body height) per robot:
+# joint-name -> angle. Overrides the tray crouch arms for this task.
+_EXTEND_ARMS = {
+    "g1": {f"{s}_shoulder_pitch_joint": -1.4 for s in ("left", "right")}
+          | {f"{s}_shoulder_roll_joint": 0.0 for s in ("left", "right")}
+          | {f"{s}_elbow_joint": 1.3 for s in ("left", "right")},
+    "talos": {f"arm_{s}_2_joint": 0.1 for s in ("left", "right")}
+             | {f"arm_{s}_4_joint": -0.2 for s in ("left", "right")},
+}
+
+
+def extend_arms(env, ctrl, robot):
+    """Override the arm posture so the robot reaches both arms forward."""
+    m, d = env.model, env.data
+    act_names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_ACTUATOR, a) for a in range(m.nu)]
+    for j, ang in _EXTEND_ARMS.get(robot, {}).items():
+        adr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)]
+        d.qpos[adr] = ang
+        if j in act_names:
+            ctrl.pos_task.q_nom[act_names.index(j)] = ang
+    mujoco.mj_forward(m, d)
+
+
+def run(angle_deg=5.0, mass=1.2, radius=0.30, robot="g1", viewer=False):
     params = load_params()
     params["gait"]["step_length"] = 0.14           # a determined push
     alpha = np.deg2rad(angle_deg)
-    x0 = 0.30                                        # ball just ahead of the lead foot
+    x0 = 0.65                                        # big ball ahead, at the hands
     deco = boulder_decorator(alpha, x0, radius, mass)
     env, ctrl, terrain = build_on_terrain(params, "incline", angle_deg, None, robot, deco)
+    extend_arms(env, ctrl, robot)                   # reach both arms forward to push
     settle(env, ctrl, terrain, 0.8)
 
     m, d = env.model, env.data
@@ -111,20 +135,24 @@ def run(angle_deg=6.0, mass=2.0, radius=0.12, robot="g1", viewer=False):
     print(f"robot advanced   = {log['cx'][-1] - com0[0]:.2f} m")
     ok = (not fell) and pushed_x > 0.15
     print(f"\nRESULT: {'PASS — the rock went up!' if ok else 'FAIL'}")
-    _plot(log, angle_deg, robot, mass)
+    _plot(log, angle_deg, robot, mass, radius)
     return ok
 
 
-def _plot(log, angle_deg, robot, mass):
+def _plot(log, angle_deg, robot, mass, radius=0.3):
+    from matplotlib.patches import Circle
     t = np.array(log["t"])
     fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
     a = np.deg2rad(angle_deg)
-    xs = np.linspace(0, max(log["rx"]) + 0.3, 100)
+    xs = np.linspace(0, max(log["rx"]) + 0.4, 100)
     ax[0].fill_between(xs, np.tan(a) * xs - 0.05, np.tan(a) * xs, color="0.75",
                        label=f"{angle_deg:.0f}° slope")
     ax[0].plot(log["cx"], np.tan(a) * np.array(log["cx"]), "b-", lw=1.5, label="robot (uphill)")
-    ax[0].plot(log["rx"], log["rz"], "-", color="0.3", lw=2.2, label="boulder")
-    ax[0].plot(log["rx"][-1], log["rz"][-1], "o", color="0.3", ms=10)
+    ax[0].plot(log["rx"], log["rz"], "-", color="0.3", lw=1, alpha=0.5)
+    # boulder as a circle at start (faint) and end (solid) -- shows its size
+    ax[0].add_patch(Circle((log["rx"][0], log["rz"][0]), radius, color="0.6", alpha=0.4))
+    ax[0].add_patch(Circle((log["rx"][-1], log["rz"][-1]), radius, color="0.4",
+                           ec="0.2", lw=1.5, label="boulder (final)"))
     ax[0].set_aspect("equal"); ax[0].grid(True, alpha=0.4); ax[0].legend()
     ax[0].set_xlabel("x [m]"); ax[0].set_ylabel("z [m]")
     ax[0].set_title(f"Sisyphus {robot.upper()}: boulder up the slope (side view)")
@@ -141,8 +169,8 @@ def _plot(log, angle_deg, robot, mass):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--angle", type=float, default=5.0)
-    ap.add_argument("--mass", type=float, default=2.0)
-    ap.add_argument("--radius", type=float, default=0.12)
+    ap.add_argument("--mass", type=float, default=1.2)
+    ap.add_argument("--radius", type=float, default=0.30)
     ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()

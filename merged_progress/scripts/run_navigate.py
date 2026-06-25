@@ -128,18 +128,27 @@ def run(robot="g1", n_tables=3, seed=0, viewer=False):
 
 
 def _plot(start, goal, tables, path, log, robot, seed):
-    fig, ax = plt.subplots(figsize=(8, 7))
-    for (x, y, r) in tables:
+    fig, ax = plt.subplots(figsize=(8.5, 7))
+    # obstacles (tables)
+    for i, (x, y, r) in enumerate(tables):
         ax.add_patch(Circle((x, y), r, color="tab:brown", alpha=0.6))
-        ax.add_patch(Circle((x, y), r, fill=False, color="0.3", lw=1))
-        ax.text(x, y, "🍽", ha="center", va="center", fontsize=9)
-    ax.plot(path[:, 0], path[:, 1], "g--", lw=1.6, label="planned path (potential field)")
-    ax.plot(log["x"], log["y"], "k-", lw=1.8, label="CoM (walked)")
-    ax.plot(*start, "bo", ms=9, label="start")
-    ax.plot(*goal, "g*", ms=18, label="goal (frappe delivered)")
+        ax.add_patch(Circle((x, y), r, fill=False, color="0.3", lw=1.2))
+        ax.text(x, y, "table", ha="center", va="center", fontsize=8, color="0.15")
+    # planned path
+    ax.plot(path[:, 0], path[:, 1], "g--", lw=2.0, label="planned path (potential field)")
+    # walked CoM (faint, shows it tracked the plan)
+    ax.plot(log["x"], log["y"], "-", color="0.55", lw=1.2, alpha=0.8, label="walked CoM")
+    # initial & final position of the waiter
+    xf, yf = log["x"][-1], log["y"][-1]
+    ax.plot(*start, "o", color="tab:blue", ms=14, label="waiter INITIAL position")
+    ax.text(start[0], start[1] + 0.09, "start", ha="center", fontsize=9, color="tab:blue")
+    ax.plot(xf, yf, "s", color="tab:red", ms=13, label="waiter FINAL position")
+    ax.text(xf, yf + 0.09, "end", ha="center", fontsize=9, color="tab:red")
+    ax.plot(*goal, "g*", ms=20, label="goal (frappe delivered)")
     ax.set_aspect("equal"); ax.grid(True, alpha=0.4); ax.legend(loc="upper left", fontsize=9)
     ax.set_xlabel("x [m]"); ax.set_ylabel("y [m]")
-    ax.set_title(f"Waiter {robot.upper()}: path planning around tables (seed {seed})")
+    ax.set_title(f"Waiter {robot.upper()}: planned path around tables — "
+                 f"start → end (seed {seed})")
     out = Path(__file__).resolve().parents[1] / "logs" / f"navigate_{robot}_seed{seed}.png"
     fig.tight_layout(); fig.savefig(out, dpi=120)
     print(f"plot saved: {out}")
