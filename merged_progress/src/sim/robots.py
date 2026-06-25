@@ -44,10 +44,13 @@ def talos_model_cfg():
             "right": {"site": "right_foot", "body": "leg_right_6_link",
                        "corners": ["talos_rf_hl", "talos_rf_hr", "talos_rf_tl", "talos_rf_tr"]},
         },
-        # bent-knee crouch: leg joint name -> angle (hip_pitch, knee, ankle_pitch)
+        # bent-knee crouch (legs) + "holding a tray" arms (elbow bent forward).
+        # leg: 3=hip_pitch, 4=knee, 5=ankle_pitch ; arm: 2=shoulder_roll, 4=elbow.
         "crouch": {f"leg_{s}_3_joint": -0.45 for s in ("left", "right")}
                   | {f"leg_{s}_4_joint": 0.85 for s in ("left", "right")}
-                  | {f"leg_{s}_5_joint": -0.42 for s in ("left", "right")},
+                  | {f"leg_{s}_5_joint": -0.42 for s in ("left", "right")}
+                  | {f"arm_{s}_2_joint": 0.20 for s in ("left", "right")}
+                  | {f"arm_{s}_4_joint": -1.60 for s in ("left", "right")},
         "ankle_pitch_joints": ["leg_left_5_joint", "leg_right_5_joint"],
     }
 

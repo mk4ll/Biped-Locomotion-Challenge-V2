@@ -44,7 +44,7 @@ def _rot(th):
     return np.array([[c, -s], [s, c]])
 
 
-def run_and_log(terrain_name, angle_deg, omni):
+def run_and_log(terrain_name, angle_deg, omni, robot="g1"):
     params = load_params()
     velocity = None
     if omni:
@@ -53,7 +53,7 @@ def run_and_log(terrain_name, angle_deg, omni):
     if terrain_name == "stairs":
         g = params["gait"]; g["step_length"] = 0.16; g["swing_apex"] = 0.06; g["n_steps"] = 18
     env, ctrl, terrain = build_on_terrain(params, terrain_name, angle_deg,
-                                          dict(rise=0.025, run=0.16, n_steps=6, x0=0.30))
+                                          dict(rise=0.025, run=0.16, n_steps=6, x0=0.30), robot)
     settle(env, ctrl, terrain, 0.8)
     base = ctrl.base_id
     il = env.data.site_xpos[ctrl.left_site].copy()
@@ -86,8 +86,9 @@ def run_and_log(terrain_name, angle_deg, omni):
                                    for k, v in log.items()}
 
 
-def make_plots(terrain_name, angle_deg, omni, plan, terrain, log):
-    label = omni or terrain_name + (f" {angle_deg:.0f}deg" if terrain_name == "incline" else "")
+def make_plots(terrain_name, angle_deg, omni, plan, terrain, log, robot="g1"):
+    label = robot.upper() + " — " + (omni or terrain_name +
+            (f" {angle_deg:.0f}deg" if terrain_name == "incline" else ""))
     fig = plt.figure(figsize=(13, 9))
 
     # (A) top-down path planning + footsteps
@@ -141,7 +142,7 @@ def make_plots(terrain_name, angle_deg, omni, plan, terrain, log):
     axD.set_title("(D) Foot height (swing clearance)")
 
     fig.tight_layout()
-    name = "plot_walk_" + (omni or terrain_name +
+    name = "plot_walk_" + robot + "_" + (omni or terrain_name +
                            (f"_{angle_deg:.0f}deg" if terrain_name == "incline" else ""))
     out = Path(__file__).resolve().parents[1] / "logs" / f"{name}.png"
     fig.savefig(out, dpi=115)
@@ -154,9 +155,10 @@ def main():
     ap.add_argument("--angle", type=float, default=12.0)
     ap.add_argument("--omni", default=None,
                     choices=["forward", "back", "strafe", "curve"])
+    ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     args = ap.parse_args()
-    params, terrain, plan, log = run_and_log(args.terrain, args.angle, args.omni)
-    make_plots(args.terrain, args.angle, args.omni, plan, terrain, log)
+    params, terrain, plan, log = run_and_log(args.terrain, args.angle, args.omni, args.robot)
+    make_plots(args.terrain, args.angle, args.omni, plan, terrain, log, args.robot)
 
 
 if __name__ == "__main__":
