@@ -28,16 +28,17 @@ from src.planning.walk_plan import WalkPlan
 from src.planning.terrain import make_terrain
 
 
-def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None, robot="g1"):
+def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None, robot="g1",
+                     decorate=None):
     """Create env+controller on a terrain and put the robot in a valid start pose.
-    robot: 'g1' or 'talos' (robot-agnostic stack)."""
+    robot: 'g1' or 'talos' (robot-agnostic stack). decorate: optional mjSpec hook."""
     if terrain_name == "incline":
         terrain = make_terrain("incline", angle=np.deg2rad(angle_deg))
     elif terrain_name == "stairs":
         terrain = make_terrain("stairs", **(stairs_kw or {}))
     else:
         terrain = make_terrain("flat")
-    env, mcfg = make_robot_env(robot, terrain=terrain)
+    env, mcfg = make_robot_env(robot, terrain=terrain, decorate=decorate)
     ctrl = WalkingController(env, params, terrain=terrain, mcfg=mcfg)
     m, d = env.model, env.data
 
