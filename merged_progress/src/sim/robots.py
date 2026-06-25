@@ -76,17 +76,21 @@ def model_cfg(robot, params=None):
     return g1_model_cfg(params) if robot == "g1" else talos_model_cfg()
 
 
-def load_robot_model(robot, params, terrain=None, scene_key="scene_flat"):
+def load_robot_model(robot, params, terrain=None, scene_key="scene_flat", decorate=None):
     """Compile the robot model (G1 or Talos) with optional terrain. Returns
-    (model, mcfg). Talos gets contact-corner sites injected via mjSpec."""
+    (model, mcfg). Talos gets contact-corner sites injected via mjSpec.
+    ``decorate(spec, mcfg)`` is an optional hook to attach extra geoms (e.g. a
+    tray + frappe to the torso) before compiling."""
     mcfg = model_cfg(robot, params)
     scene = str(resolve(mcfg[scene_key]))
-    if robot == "talos" or terrain is not None:
+    if robot == "talos" or terrain is not None or decorate is not None:
         spec = mujoco.MjSpec.from_file(scene)
         if robot == "talos":
             _add_talos_corner_sites(spec)
         if terrain is not None:
             terrain.apply(spec)
+        if decorate is not None:
+            decorate(spec, mcfg)
         model = spec.compile()
     else:
         model = mujoco.MjModel.from_xml_path(scene)

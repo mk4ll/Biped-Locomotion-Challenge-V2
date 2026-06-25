@@ -77,8 +77,10 @@ def settle(env, ctrl, terrain, seconds=0.8):
         env.step(res["tau"])
 
 
-def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1"):
+def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=None):
     params = load_params()
+    if step_len is not None:                       # user-selected speed
+        params["gait"]["step_length"] = step_len
     # Per-terrain gait tuning (step length must match the tread run for a
     # feet-together-per-tread stair gait; longer SS + more clearance to climb).
     stairs_kw = dict(rise=0.025, run=0.16, n_steps=6, x0=0.30)
@@ -140,6 +142,8 @@ if __name__ == "__main__":
     ap.add_argument("--terrain", default="flat", choices=["flat", "incline", "stairs"])
     ap.add_argument("--angle", type=float, default=8.0)
     ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
+    ap.add_argument("--step-len", type=float, default=None,
+                    help="step length [m] = speed knob (flat safe <=0.20; ~0.23 m/s)")
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
-    run(args.terrain, args.angle, args.viewer, args.robot)
+    run(args.terrain, args.angle, args.viewer, args.robot, args.step_len)

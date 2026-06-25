@@ -1,0 +1,82 @@
+"""Go-to-goal path planning around circular obstacles (tables).
+
+A simple, robust artificial-potential-field planner: gradient descent toward the
+goal with repulsion from each obstacle plus a tangential 'swirl' term so the path
+arcs AROUND a table instead of stalling head-on. Returns a smooth 2-D centre-line
+path that the footstep planner (plan_path) follows.
+"""
+import numpy as np
+
+
+def plan_path(start, goal, obstacles, robot_radius=0.28,
+              step=0.04, max_iters=5000, swirl=0.8, influence=0.9):
+    """start/goal: (x,y). obstacles: list of (x,y,radius). Returns Nx2 path.
+
+    Wide influence radius + moderate swirl => the path starts curving early and
+    arcs gently around tables (no sharp turns the walking gait can't follow).
+    """
+    start = np.asarray(start, float)[:2]
+    goal = np.asarray(goal, float)[:2]
+    obs = [(np.array([ox, oy]), r + robot_radius) for (ox, oy, r) in obstacles]
+
+    p = start.copy()
+    path = [p.copy()]
+    for _ in range(max_iters):
+        to_goal = goal - p
+        dgoal = np.linalg.norm(to_goal)
+        if dgoal < 0.08:
+            break
+        f = to_goal / dgoal                      # attraction (unit)
+        for c, R in obs:
+            d = p - c
+            dist = np.linalg.norm(d)
+            if dist < R + influence:             # within influence radius
+                n = d / (dist + 1e-9)
+                strength = (R + influence - dist) / influence
+                f = f + 1.4 * strength * n       # repulsion (push away)
+                tang = np.array([-n[1], n[0]])   # tangential swirl (arc around)
+                if np.dot(tang, to_goal) < 0:
+                    tang = -tang
+                f = f + swirl * strength * tang
+        nf = np.linalg.norm(f)
+        if nf < 1e-6:
+            break
+        p = p + step * f / nf
+        path.append(p.copy())
+    path.append(goal.copy())
+    return _smooth(np.array(path), k=25)
+
+
+def _smooth(path, k=9):
+    """Moving-average smooth (keep endpoints)."""
+    if len(path) < k:
+        return path
+    out = path.copy()
+    half = k // 2
+    for i in range(half, len(path) - half):
+        out[i] = path[i - half:i + half + 1].mean(axis=0)
+    return out
+
+
+def random_tables(n, area=(0.7, 2.4, -0.8, 0.8), radius=(0.16, 0.24),
+                  start=(0, 0), goal=None, clearance=0.6, seed=None, tries=400):
+    """Place n well-spaced tables in the area, clear of start/goal.
+
+    Tables are kept apart (>= 0.9 m centre-to-centre) so no gap is too tight for
+    the robot to thread -- the path arcs around rather than squeezing between.
+    """
+    rng = np.random.default_rng(seed)
+    xlo, xhi, ylo, yhi = area
+    goal = goal if goal is not None else (xhi + 0.5, 0.0)
+    tables = []
+    for _ in range(n):
+        for _ in range(tries):
+            x = rng.uniform(xlo, xhi); y = rng.uniform(ylo, yhi)
+            r = rng.uniform(*radius)
+            if np.hypot(x - start[0], y - start[1]) < clearance + r:
+                continue
+            if np.hypot(x - goal[0], y - goal[1]) < clearance + r:
+                continue
+            if all(np.hypot(x - tx, y - ty) > 0.9 for (tx, ty, tr) in tables):
+                tables.append((x, y, r)); break
+    return tables, goal

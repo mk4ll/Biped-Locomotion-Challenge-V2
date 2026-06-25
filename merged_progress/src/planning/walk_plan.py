@@ -14,14 +14,17 @@ from src.planning.fsm import phase_at, total_duration
 
 class WalkPlan:
     def __init__(self, params, init_left, init_right, com0, com_height=None,
-                 gravity=9.81, terrain=None, velocity=None):
+                 gravity=9.81, terrain=None, velocity=None, path=None):
         self.params = params
         self.terrain = terrain
         # nominal CoM height ABOVE the local surface (regulated relative to terrain)
         h0 = terrain.height(com0[0], 0.0) if terrain is not None else 0.0
         self.z_above = (com_height if com_height is not None else com0[2]) - h0
         self.fp = FootstepPlanner(params)
-        if velocity is not None:
+        if path is not None:
+            self.footsteps, self.timeline = self.fp.plan_path(
+                path, init_left, init_right, terrain=terrain)
+        elif velocity is not None:
             vx, vy, vyaw = velocity
             self.footsteps, self.timeline = self.fp.plan_velocity(
                 init_left, init_right, vx, vy, vyaw, terrain=terrain)

@@ -85,15 +85,18 @@ def make_env_from_params(scene_key: str = "scene_flat", terrain=None) -> MujocoE
                      terrain=terrain)
 
 
-def make_robot_env(robot: str = "g1", terrain=None, scene_key: str = "scene_flat"):
+def make_robot_env(robot: str = "g1", terrain=None, scene_key: str = "scene_flat",
+                   decorate=None):
     """Robot-agnostic env factory (G1 or Talos). Returns (env, mcfg).
 
     G1 uses its baked 'stand' crouch keyframe; Talos is loaded with contact-corner
     sites injected and placed into a bent-knee crouch with the feet on the ground.
+    ``decorate(spec, mcfg)`` optionally attaches extra geoms (e.g. tray + frappe).
     """
     from src.sim.robots import load_robot_model
     params = load_params()
-    model, mcfg = load_robot_model(robot, params, terrain=terrain, scene_key=scene_key)
+    model, mcfg = load_robot_model(robot, params, terrain=terrain, scene_key=scene_key,
+                                   decorate=decorate)
     env = MujocoEnv(model=model, keyframe=mcfg["keyframe"], terrain=terrain)
     if robot == "talos":
         _init_talos_crouch(env, mcfg)

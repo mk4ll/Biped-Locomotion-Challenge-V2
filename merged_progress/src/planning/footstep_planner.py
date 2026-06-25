@@ -89,6 +89,81 @@ class FootstepPlanner:
                  "zmp_to": mid})
         return footsteps, timeline
 
+    def plan_path(self, path, init_left, init_right, terrain=None):
+        """Footsteps that follow a 2-D centre-line ``path`` (Nx2 waypoints).
+
+        Steps are placed every ``step_length`` of arc length along the path, each
+        foot a half-width to the side of the path, pelvis facing the path tangent.
+        Used by the go-to-goal navigator (path planning around obstacles).
+        Returns (footsteps, timeline) with per-phase 'heading'.
+        """
+        path = np.asarray(path, float)
+        L = np.array(init_left, float); R = np.array(init_right, float)
+        half_w = 0.5 * abs(L[1] - R[1])
+        z_off = 0.5 * (L[2] + R[2]) - (terrain.height(0.5 * (L[0] + R[0]), 0.0)
+                                       if terrain is not None else 0.0)
+        seg = np.diff(path, axis=0)
+        seglen = np.linalg.norm(seg, axis=1)
+        cum = np.concatenate([[0.0], np.cumsum(seglen)])
+        total = float(cum[-1])
+
+        def point_at(s):
+            s = np.clip(s, 0.0, total)
+            i = int(np.clip(np.searchsorted(cum, s) - 1, 0, len(seg) - 1))
+            f = (s - cum[i]) / max(seglen[i], 1e-6)
+            p = path[i] + f * seg[i]
+            th = np.arctan2(seg[i, 1], seg[i, 0])
+            return p, th
+
+        def rot(th):
+            c, s = np.cos(th), np.sin(th)
+            return np.array([[c, -s], [s, c]])
+
+        def gz(xy):
+            return (terrain.height(xy[0], xy[1]) if terrain is not None else 0.0) + z_off
+
+        feet = {"left": L.copy(), "right": R.copy()}
+        footsteps = [{"foot": "left", "pos": L.copy()},
+                     {"foot": "right", "pos": R.copy()}]
+        timeline = []
+        t = 0.0
+        max_dyaw = 0.13          # clamp heading change per step (turning is fragile)
+        cur_head = 0.0
+
+        def add(ph):
+            ph["t0"] = t; ph["t1"] = t + ph["dur"]; ph.setdefault("heading", 0.0)
+            timeline.append(ph); return ph["t1"]
+
+        t = add({"type": "DS", "dur": self.t_ds_init, "support": "double", "swing": None,
+                 "zmp_from": 0.5 * (L[:2] + R[:2]), "zmp_to": 0.5 * (L[:2] + R[:2])})
+        swing = self.first_swing
+        n_steps = max(2, int(total / self.step_length))
+        for k in range(n_steps):
+            support = "left" if swing == "right" else "right"
+            p, th = point_at((k + 1) * self.step_length)
+            # clamp the per-step heading change so the robot never out-turns the gait
+            dyaw = np.arctan2(np.sin(th - cur_head), np.cos(th - cur_head))
+            cur_head = cur_head + np.clip(dyaw, -max_dyaw, max_dyaw)
+            th = cur_head
+            lateral = half_w if swing == "left" else -half_w
+            txy = p + rot(th) @ np.array([0.0, lateral])
+            target = np.array([txy[0], txy[1], gz(txy)])
+            t = add({"type": "SS", "dur": self.t_ss, "support": support, "swing": swing,
+                     "swing_from": feet[swing].copy(), "swing_to": target.copy(),
+                     "zmp_from": feet[support][:2].copy(),
+                     "zmp_to": feet[support][:2].copy(), "heading": th})
+            feet[swing] = target
+            footsteps.append({"foot": swing, "pos": target.copy()})
+            t = add({"type": "DS", "dur": self.t_ds, "support": "double", "swing": None,
+                     "zmp_from": feet[support][:2].copy(),
+                     "zmp_to": feet[swing][:2].copy(), "heading": th})
+            swing = "left" if swing == "right" else "right"
+        mid = 0.5 * (feet["left"][:2] + feet["right"][:2])
+        t = add({"type": "DS", "dur": self.t_ds_final, "support": "double", "swing": None,
+                 "zmp_from": timeline[-1]["zmp_to"].copy(), "zmp_to": mid,
+                 "heading": timeline[-1]["heading"]})
+        return footsteps, timeline
+
     def plan_velocity(self, init_left, init_right, vx, vy, vyaw=0.0, terrain=None):
         """Omnidirectional footsteps from a body-frame velocity command.
 
