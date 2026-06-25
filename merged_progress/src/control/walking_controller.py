@@ -114,6 +114,11 @@ class WalkingController:
         self.com_task.v_ref = np.array([com_vel[0], com_vel[1], 0.0])
         # contact set
         self.contacts.set_support(ref["support"])
+        # heading: keep the pelvis yaw tracking the commanded heading (for turning)
+        th = ref.get("heading", 0.0)
+        if abs(th) > 1e-9:
+            c, s = np.cos(th), np.sin(th)
+            self.ori_task.R_des = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1.0]])
         # terrain-aware friction cone: orient to the surface under the support feet
         if self.terrain is not None:
             self.R_surface = self._surface_R(com[0])

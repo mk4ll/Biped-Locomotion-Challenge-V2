@@ -14,15 +14,20 @@ from src.planning.fsm import phase_at, total_duration
 
 class WalkPlan:
     def __init__(self, params, init_left, init_right, com0, com_height=None,
-                 gravity=9.81, terrain=None):
+                 gravity=9.81, terrain=None, velocity=None):
         self.params = params
         self.terrain = terrain
         # nominal CoM height ABOVE the local surface (regulated relative to terrain)
         h0 = terrain.height(com0[0], 0.0) if terrain is not None else 0.0
         self.z_above = (com_height if com_height is not None else com0[2]) - h0
         self.fp = FootstepPlanner(params)
-        self.footsteps, self.timeline = self.fp.plan(init_left, init_right,
-                                                     terrain=terrain)
+        if velocity is not None:
+            vx, vy, vyaw = velocity
+            self.footsteps, self.timeline = self.fp.plan_velocity(
+                init_left, init_right, vx, vy, vyaw, terrain=terrain)
+        else:
+            self.footsteps, self.timeline = self.fp.plan(init_left, init_right,
+                                                         terrain=terrain)
         # DCM uses the vertical CoM height above the surface; mild slope ok.
         self.dcm = DCMPlanner(params, self.z_above, gravity)
         self.traj = self.dcm.generate(self.timeline, np.asarray(com0)[:2])
@@ -52,7 +57,8 @@ class WalkPlan:
         ref = {"com": com, "com_vel": com_vel, "zmp": zmp, "dcm": dcm,
                "omega": self.traj["omega"], "progress": s,
                "support": ph["support"], "phase": ph["type"],
-               "swing": ph["swing"], "swing_pos": None, "swing_vel": None}
+               "swing": ph["swing"], "swing_pos": None, "swing_vel": None,
+               "heading": ph.get("heading", 0.0)}
         if ph["type"] == "SS":
             pos, vel = swing_trajectory(s, ph["swing_from"], ph["swing_to"],
                                         self.fp.swing_apex, ph["dur"])

@@ -88,3 +88,70 @@ class FootstepPlanner:
                  "swing": None, "zmp_from": timeline[-1]["zmp_to"].copy(),
                  "zmp_to": mid})
         return footsteps, timeline
+
+    def plan_velocity(self, init_left, init_right, vx, vy, vyaw=0.0, terrain=None):
+        """Omnidirectional footsteps from a body-frame velocity command.
+
+        The support 'center' advances by (vx, vy) each step in the current heading
+        frame and the heading rotates by vyaw per step; each foot is placed a fixed
+        half-width to its side of the center. Handles forward / back / strafe /
+        turn / curve. Returns (footsteps, timeline) with a per-phase 'heading'.
+        """
+        L = np.array(init_left, float)
+        R = np.array(init_right, float)
+        half_w = 0.5 * abs(L[1] - R[1])
+        z_off = 0.5 * (L[2] + R[2]) - (terrain.height(0.5 * (L[0] + R[0]), 0.0)
+                                       if terrain is not None else 0.0)
+
+        def ground_z(xy):
+            h = terrain.height(xy[0], xy[1]) if terrain is not None else 0.0
+            return h + z_off
+
+        def rot(th):
+            c, s = np.cos(th), np.sin(th)
+            return np.array([[c, -s], [s, c]])
+
+        theta = 0.0
+        center = 0.5 * (L[:2] + R[:2])
+        feet = {"left": L.copy(), "right": R.copy()}
+        footsteps = [{"foot": "left", "pos": L.copy()},
+                     {"foot": "right", "pos": R.copy()}]
+        timeline = []
+        t = 0.0
+        T_step = self.t_ss + self.t_ds
+
+        def add(ph):
+            ph["t0"] = t; ph["t1"] = t + ph["dur"]
+            ph.setdefault("heading", theta)
+            timeline.append(ph)
+            return ph["t1"]
+
+        t = add({"type": "DS", "dur": self.t_ds_init, "support": "double",
+                 "swing": None, "zmp_from": 0.5 * (L[:2] + R[:2]),
+                 "zmp_to": 0.5 * (L[:2] + R[:2]), "heading": theta})
+
+        swing = self.first_swing
+        for k in range(self.n_steps):
+            support = "left" if swing == "right" else "right"
+            center = center + rot(theta) @ np.array([vx, vy]) * T_step
+            theta = theta + vyaw * T_step
+            lateral = half_w if swing == "left" else -half_w
+            txy = center + rot(theta) @ np.array([0.0, lateral])
+            target = np.array([txy[0], txy[1], ground_z(txy)])
+            t = add({"type": "SS", "dur": self.t_ss, "support": support,
+                     "swing": swing, "swing_from": feet[swing].copy(),
+                     "swing_to": target.copy(),
+                     "zmp_from": feet[support][:2].copy(),
+                     "zmp_to": feet[support][:2].copy(), "heading": theta})
+            feet[swing] = target
+            footsteps.append({"foot": swing, "pos": target.copy()})
+            t = add({"type": "DS", "dur": self.t_ds, "support": "double",
+                     "swing": None, "zmp_from": feet[support][:2].copy(),
+                     "zmp_to": feet[swing][:2].copy(), "heading": theta})
+            swing = "left" if swing == "right" else "right"
+
+        mid = 0.5 * (feet["left"][:2] + feet["right"][:2])
+        t = add({"type": "DS", "dur": self.t_ds_final, "support": "double",
+                 "swing": None, "zmp_from": timeline[-1]["zmp_to"].copy(),
+                 "zmp_to": mid, "heading": theta})
+        return footsteps, timeline
