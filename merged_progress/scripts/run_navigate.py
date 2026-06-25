@@ -61,12 +61,35 @@ def tray_decorator(torso_body):
     return deco
 
 
-def run(robot="g1", n_tables=3, seed=0, viewer=False):
+def _make_walkable_layout(n_tables, start, seed0):
+    """Resample random tables until the planned path reaches the goal and is not
+    too sharp for the walking gait (so every random run is actually walkable)."""
+    s = seed0
+    for _ in range(80):
+        tables, goal = navigation.random_tables(n_tables, start=start, seed=s)
+        path = navigation.plan_path(start, goal, tables)
+        reached = np.hypot(path[-1, 0] - goal[0], path[-1, 1] - goal[1]) < 0.15
+        # path must reach the goal, be gentle, AND start heading roughly forward
+        # (a table right in front makes the robot veer on its first step -> fall)
+        i02 = int(np.argmin(np.abs(np.cumsum(
+            np.r_[0, np.linalg.norm(np.diff(path, axis=0), axis=1)]) - 0.35)))
+        head0 = np.arctan2(path[i02, 1] - path[0, 1], path[i02, 0] - path[0, 0])
+        ok = (reached and len(tables) == n_tables
+              and navigation.path_curviness(path) < 0.09 and abs(head0) < 0.25)
+        if ok:
+            return tables, goal, path, s
+        s += 1
+    return tables, goal, path, s          # best effort
+
+
+def run(robot="g1", n_tables=4, seed=None, viewer=False):
     params = load_params()
-    params["gait"]["step_length"] = 0.11        # gentle pace for stable turning
+    params["gait"]["step_length"] = 0.10        # gentle pace for stable turning
     start = (0.0, 0.0)
-    tables, goal = navigation.random_tables(n_tables, start=start, seed=seed)
-    path = navigation.plan_path(start, goal, tables)
+    if seed is None:
+        seed = int(np.random.default_rng().integers(0, 100000))   # random each run
+    tables, goal, path, seed = _make_walkable_layout(n_tables, start, seed)
+    print(f"(layout seed = {seed}, {len(tables)} tables)")
 
     # terrain with the tables as cylindrical obstacles + a goal marker
     terrain = make_terrain("flat", obstacles=tuple(tables), markers=(goal,))
@@ -157,8 +180,9 @@ def _plot(start, goal, tables, path, log, robot, seed):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
-    ap.add_argument("--tables", type=int, default=3)
-    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--tables", type=int, default=4)
+    ap.add_argument("--seed", type=int, default=None,
+                    help="omit for a new random layout each run")
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
     run(args.robot, args.tables, args.seed, args.viewer)

@@ -8,8 +8,8 @@ path that the footstep planner (plan_path) follows.
 import numpy as np
 
 
-def plan_path(start, goal, obstacles, robot_radius=0.28,
-              step=0.04, max_iters=5000, swirl=0.8, influence=0.9):
+def plan_path(start, goal, obstacles, robot_radius=0.30,
+              step=0.04, max_iters=5000, swirl=0.7, influence=1.0):
     """start/goal: (x,y). obstacles: list of (x,y,radius). Returns Nx2 path.
 
     Wide influence radius + moderate swirl => the path starts curving early and
@@ -58,7 +58,23 @@ def _smooth(path, k=9):
     return out
 
 
-def random_tables(n, area=(0.7, 2.4, -0.8, 0.8), radius=(0.16, 0.24),
+def path_curviness(path, step=0.11):
+    """Max heading change per STEP-length window (predicts the gait's turn rate)."""
+    seg = np.diff(path, axis=0)
+    seglen = np.linalg.norm(seg, axis=1)
+    cum = np.concatenate([[0.0], np.cumsum(seglen)])
+    total = float(cum[-1])
+    if total < step:
+        return 0.0
+    ss = np.arange(0.0, total, step)
+    head = []
+    for s in ss:
+        i = int(np.clip(np.searchsorted(cum, s) - 1, 0, len(seg) - 1))
+        head.append(np.arctan2(seg[i, 1], seg[i, 0]))
+    return float(np.abs(np.diff(np.unwrap(head))).max()) if len(head) > 1 else 0.0
+
+
+def random_tables(n, area=(0.7, 3.2, -1.0, 1.0), radius=(0.16, 0.24),
                   start=(0, 0), goal=None, clearance=0.6, seed=None, tries=400):
     """Place n well-spaced tables in the area, clear of start/goal.
 

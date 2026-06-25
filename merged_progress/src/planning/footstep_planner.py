@@ -127,7 +127,7 @@ class FootstepPlanner:
                      {"foot": "right", "pos": R.copy()}]
         timeline = []
         t = 0.0
-        max_dyaw = 0.13          # clamp heading change per step (turning is fragile)
+        max_dyaw = 0.11          # clamp heading change per step (turning is fragile)
         cur_head = 0.0
 
         def add(ph):

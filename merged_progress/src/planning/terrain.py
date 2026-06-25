@@ -55,13 +55,7 @@ class Flat(Terrain):
 
     def apply(self, spec) -> None:
         for i, (ox, oy, rr) in enumerate(self.obstacles):
-            g = spec.worldbody.add_geom()
-            g.name = f"obstacle_{i}"
-            g.type = mujoco.mjtGeom.mjGEOM_CYLINDER
-            g.size = [rr, 0.6, 0.0]
-            g.pos = [ox, oy, 0.6]
-            g.rgba = [0.85, 0.35, 0.2, 1.0]
-            g.friction = [0.8, 0.005, 0.0001]
+            self._add_table(spec, i, ox, oy, rr)
         for i, (mx, my) in enumerate(self.markers):
             g = spec.worldbody.add_geom()
             g.name = f"marker_{i}"
@@ -71,6 +65,26 @@ class Flat(Terrain):
             g.rgba = [0.2, 0.8, 0.3, 0.9]
             g.contype = 0
             g.conaffinity = 0
+
+    @staticmethod
+    def _add_table(spec, i, ox, oy, rr, h=0.50):
+        """A real-looking table: round top + 4 legs (collidable footprint = rr)."""
+        top = spec.worldbody.add_geom()
+        top.name = f"table_{i}_top"
+        top.type = mujoco.mjtGeom.mjGEOM_CYLINDER
+        top.size = [rr, 0.022, 0.0]
+        top.pos = [ox, oy, h]
+        top.rgba = [0.55, 0.36, 0.20, 1.0]               # wood
+        top.friction = [0.8, 0.005, 0.0001]
+        d = rr * 0.62
+        for k, (sx, sy) in enumerate([(1, 1), (1, -1), (-1, 1), (-1, -1)]):
+            leg = spec.worldbody.add_geom()
+            leg.name = f"table_{i}_leg{k}"
+            leg.type = mujoco.mjtGeom.mjGEOM_CYLINDER
+            leg.size = [0.025, h / 2, 0.0]
+            leg.pos = [ox + sx * d, oy + sy * d, h / 2]
+            leg.rgba = [0.40, 0.26, 0.14, 1.0]
+            leg.friction = [0.8, 0.005, 0.0001]
 
 
 @dataclasses.dataclass
