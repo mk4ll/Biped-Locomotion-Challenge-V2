@@ -66,6 +66,7 @@ wbc:
       kp: 100.0               # height (z) PD only; xy uses DCM feedback law
       kd: 20.0
       k_dcm: 3.0              # DCM feedback gain (xy): xi_dot_cmd = xi_dot_ref + k(xi_ref-xi)
+      comz_lp_alpha: 0.02     # low-pass on CoM-height ref (smooths stair step fn)
       height: null            # null => use nominal CoM height from keyframe
     orientation:              # pelvis/torso upright w.r.t. gravity
       weight: 20.0

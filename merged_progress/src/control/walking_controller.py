@@ -68,6 +68,10 @@ class WalkingController:
         self._foot_offset = np.zeros(2)
         # slope feedforward: forward CoM accel to counter gravity-along-slope (Stage 6)
         self.slope_accel_ff = np.zeros(2)
+        # low-pass on the CoM-height reference (terrain.height is a step fn on stairs;
+        # filtering it avoids a vertical jerk each time the CoM crosses a tread edge)
+        self.comz_lp_alpha = params["wbc"]["tasks"]["com"].get("comz_lp_alpha", 1.0)
+        self._comz_lp = None
 
         self.wbc = WBCQP(self.terms, params)
         self.gc = GravityCompensator(self.terms, mujoco.mj_getTotalmass(env.model),
@@ -100,8 +104,13 @@ class WalkingController:
         p_zmp_cmd = xi - xi_dot_cmd / w
         a_xy = w * w * (com[:2] - p_zmp_cmd) + self.slope_accel_ff
         self.com_task.a_ref = np.array([a_xy[0], a_xy[1], 0.0])
+        # low-pass the CoM-height reference (smooths the stair step function)
+        zref = ref["com"][2]
+        if self._comz_lp is None:
+            self._comz_lp = zref
+        self._comz_lp += self.comz_lp_alpha * (zref - self._comz_lp)
         # xy error handled by a_ref above -> zero the PD error; z tracks height.
-        self.com_task.p_ref = np.array([com[0], com[1], ref["com"][2]])
+        self.com_task.p_ref = np.array([com[0], com[1], self._comz_lp])
         self.com_task.v_ref = np.array([com_vel[0], com_vel[1], 0.0])
         # contact set
         self.contacts.set_support(ref["support"])

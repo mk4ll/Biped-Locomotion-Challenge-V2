@@ -77,7 +77,14 @@ def settle(env, ctrl, terrain, seconds=0.8):
 
 def run(terrain_name="flat", angle_deg=8.0, viewer=False):
     params = load_params()
-    stairs_kw = dict(rise=0.04, run=0.30, n_steps=4)
+    # Per-terrain gait tuning (step length must match the tread run for a
+    # feet-together-per-tread stair gait; longer SS + more clearance to climb).
+    stairs_kw = dict(rise=0.025, run=0.16, n_steps=6, x0=0.30)
+    if terrain_name == "stairs":
+        g = params["gait"]
+        g["step_length"] = stairs_kw["run"]      # one tread per step (default timing works @0.16)
+        g["swing_apex"] = 0.06                    # clear the riser
+        g["n_steps"] = 18                         # approach + feet-together climb of all treads
     env, ctrl, terrain = build_on_terrain(params, terrain_name, angle_deg, stairs_kw)
     settle(env, ctrl, terrain, 0.8)
 
