@@ -90,7 +90,18 @@ python scripts/run_omni.py --vx 0.10 --vyaw 0.12   # curve
 python scripts/05_push_recovery.py
 python scripts/06_walk_incline.py --sweep          # slip-limit vs theory
 python scripts/evaluate.py                         # full battery -> logs/eval_report.md
+
+# Lecture-style plots: path planning, footstep placement, CoM height, ZMP/DCM
+python scripts/plot_walk.py --terrain flat
+python scripts/plot_walk.py --terrain incline --angle 12
+python scripts/plot_walk.py --terrain stairs       # CoM height climbs the treads
+python scripts/plot_walk.py --omni curve           # curved path + rotated footsteps
 ```
+
+**Plots (`logs/plot_walk_*.png`)** — 4 panels ανά scenario:
+(A) path planning & **footstep placement** top-down (foot rectangles + CoM/DCM/ZMP),
+(B) **CoM height** vs forward position με την επιφάνεια του terrain (φαίνεται να σκαρφαλώνει),
+(C) CoM/DCM/ZMP vs χρόνο, (D) swing-foot height (clearance).
 
 ---
 

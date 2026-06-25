@@ -8,6 +8,28 @@
 | [`kanellos_progress/`](kanellos_progress/) | Υλοποίηση Κανέλλου — feature-rich: terrain-aware incline (14°) + **stairs**, **omnidirectional**, **navigation** (obstacle avoidance), **DCM preview-MPC**, **2ο ρομπότ (Talos)**, evaluation harness + GIFs. |
 | [`merged_progress/`](merged_progress/) | **Merge**: αρχιτεκτονική/λογική Μάριου + ΟΛΑ τα tasks του Κανέλλου. Incline **3°→16°**, **stairs full climb**, **omnidirectional** (fwd/back/strafe/curve), push recovery, αυτόματο eval — όλα PASS. |
 
+## Πίνακας διαφορών (checklist)
+
+| Δυνατότητα / Χαρακτηριστικό | marios | kanellos | merged |
+|---|:---:|:---:|:---:|
+| Pipeline offline→online→WBC | ✅ | ✅ | ✅ |
+| WBC contact | hard 6D | soft | **hard 6D** |
+| Gravity-comp sanity test | ✅ | ✅ | ✅ |
+| Standing / weight-shift / single-support | ✅ | ✅ | ✅ |
+| Flat walking | ✅ | ✅ | ✅ |
+| Incline walking | ⚠️ 3° | ✅ 14° | ✅ **16°** |
+| Standing on incline | ✅ 26° | ~15° | ✅ **26°** |
+| Stairs | ❌ | ✅ | ✅ **πλήρης** |
+| Omnidirectional (strafe/turn/curve) | ❌ | ✅ | ✅ |
+| Push recovery | ✅ | ✅ | ✅ |
+| Navigation (obstacle avoidance) | ❌ | ✅ | ⏳ |
+| DCM preview-MPC | ❌ | ✅ | ⏳ |
+| 2ο ρομπότ (Talos) | ❌ | ✅ | ⏳ |
+| Evaluation harness | ❌ | ✅ +GIFs | ✅ |
+| Θεωρητική ανάλυση (slip/tip) | ✅ | ❌ | ✅ |
+| **Lecture-style plots** (path/footsteps/CoM height) | μερικά | ❌ | ✅ |
+| Tray-pose χέρια (δίσκος) | ✅ | ❌ | ✅ |
+
 ## Σύγκριση (+ / −)
 
 **Κανέλλος (+):** terrain-aware από την αρχή → incline 14° + stairs· omnidirectional·
