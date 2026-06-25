@@ -125,9 +125,11 @@ def walk_on_incline(params, alpha_deg, viewer=False, settle_s=0.8):
     init_left = env.data.site_xpos[ctrl.left_site].copy()
     init_right = env.data.site_xpos[ctrl.right_site].copy()
     com0 = env.data.subtree_com[base].copy()
+    from src.planning.terrain import make_terrain
     plan = WalkPlan(params, init_left, init_right, com0,
                     com_height=params["gait"]["com_height"],
-                    gravity=params["env"]["gravity"], incline_rad=alpha)
+                    gravity=params["env"]["gravity"],
+                    terrain=make_terrain("incline", angle=alpha))
     x0 = com0[0]
     n = int(plan.duration / env.dt)
     log = {"x": [], "z": [], "xr": [], "zr": []}
