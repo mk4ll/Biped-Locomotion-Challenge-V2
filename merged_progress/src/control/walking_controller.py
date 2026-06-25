@@ -19,11 +19,11 @@ from src.control.gravity_comp import GravityCompensator
 
 
 class WalkingController:
-    def __init__(self, env, params, terrain=None):
+    def __init__(self, env, params, terrain=None, mcfg=None):
         self.env = env
         self.params = params
         self.terrain = terrain
-        m = params["model"]
+        m = mcfg if mcfg is not None else params["model"]   # robot model config
         lc = m["feet"]["left"]["corners"]
         rc = m["feet"]["right"]["corners"]
         self.terms = ModelTerms(env.model, lc + rc)

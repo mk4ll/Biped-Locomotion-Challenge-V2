@@ -9,12 +9,15 @@ from src.utils.config import load_params, resolve
 class MujocoEnv:
     """Thin wrapper around an MjModel/MjData pair driven by joint torques."""
 
-    def __init__(self, scene_path: str | Path, keyframe: str | None = None,
-                 terrain=None):
+    def __init__(self, scene_path: str | Path = None, keyframe: str | None = None,
+                 terrain=None, model=None):
         # Load via mjSpec so a Terrain can mutate the model at load time
         # (tilt the floor, add stair boxes / obstacles). terrain=None => flat XML.
+        # A prebuilt ``model`` (e.g. from robots.load_robot_model) bypasses loading.
         self.terrain = terrain
-        if terrain is not None:
+        if model is not None:
+            self.model = model
+        elif terrain is not None:
             spec = mujoco.MjSpec.from_file(str(resolve(scene_path)))
             terrain.apply(spec)
             self.model = spec.compile()
@@ -80,3 +83,34 @@ def make_env_from_params(scene_key: str = "scene_flat", terrain=None) -> MujocoE
     params = load_params()
     return MujocoEnv(params["model"][scene_key], keyframe=params["model"]["keyframe"],
                      terrain=terrain)
+
+
+def make_robot_env(robot: str = "g1", terrain=None, scene_key: str = "scene_flat"):
+    """Robot-agnostic env factory (G1 or Talos). Returns (env, mcfg).
+
+    G1 uses its baked 'stand' crouch keyframe; Talos is loaded with contact-corner
+    sites injected and placed into a bent-knee crouch with the feet on the ground.
+    """
+    from src.sim.robots import load_robot_model
+    params = load_params()
+    model, mcfg = load_robot_model(robot, params, terrain=terrain, scene_key=scene_key)
+    env = MujocoEnv(model=model, keyframe=mcfg["keyframe"], terrain=terrain)
+    if robot == "talos":
+        _init_talos_crouch(env, mcfg)
+    return env, mcfg
+
+
+def _init_talos_crouch(env, mcfg):
+    """Put Talos into a bent-knee crouch with feet flat on the ground."""
+    m, d = env.model, env.data
+    if m.nkey > 0:
+        mujoco.mj_resetDataKeyframe(m, d, 0)
+    for j, ang in mcfg["crouch"].items():
+        adr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)]
+        d.qpos[adr] = ang
+    mujoco.mj_forward(m, d)
+    # drop the base so the lowest foot corner just touches the ground (z=0.005)
+    corners = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SITE, c)
+               for side in ("left", "right") for c in mcfg["feet"][side]["corners"]]
+    d.qpos[2] -= (min(d.site_xpos[c][2] for c in corners) - 0.005)
+    mujoco.mj_forward(m, d)

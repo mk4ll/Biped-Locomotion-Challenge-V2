@@ -24,7 +24,7 @@
 | Push recovery | ✅ | ✅ | ✅ |
 | Navigation (obstacle avoidance) | ❌ | ✅ | ⏳ |
 | DCM preview-MPC | ❌ | ✅ | ⏳ |
-| 2ο ρομπότ (Talos) | ❌ | ✅ | ⏳ |
+| 2ο ρομπότ (Talos) | ❌ | ✅ | ✅ ([r] toggle) |
 | Evaluation harness | ❌ | ✅ +GIFs | ✅ |
 | Θεωρητική ανάλυση (slip/tip) | ✅ | ❌ | ✅ |
 | **Lecture-style plots** (path/footsteps/CoM height) | μερικά | ❌ | ✅ |

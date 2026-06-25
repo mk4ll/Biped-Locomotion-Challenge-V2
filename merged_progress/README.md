@@ -47,6 +47,7 @@ swing splines                  heading/yaw track                   friction cone
 | **Omnidirectional** | fwd/back/strafe/**curve +42°** | `run_omni.py --vx 0.1 --vyaw 0.12` |
 | **Push recovery (walk)** | lateral 50 N / sagittal 100 N | `05_push_recovery.py` |
 | Standing on incline (slip-limited) | **stable έως 26° = arctan μ** | `06_walk_incline.py --sweep` |
+| **2ο ρομπότ — Talos (94 kg)** | stand, flat **0.99 m**, incline 8° | `run_walk.py --robot talos` |
 
 **Σημαντικό:** το incline walking πήγε από **3° → 16°** στο merge, χάρη στο
 **terrain-aware design** (footsteps ON the surface, friction cones σε surface frame,
@@ -69,10 +70,15 @@ swing feet aligned to normal) — η κύρια συνεισφορά που υι
 ### Διαδραστικό μενού (συνιστάται)
 ```bash
 pip install -r requirements.txt
-python main.py        # μενού: πάτα [1]..[b] για task, [v] viewer on/off, [ESC] έξοδος
+python main.py    # μενού: [1]..[b] task, [v] viewer on/off, [r] robot G1<->Talos, [ESC] έξοδος
 ```
 Κάθε task τρέχει σε **απομονωμένο subprocess** (robust: σφάλμα σε ένα δεν ρίχνει το μενού)
-και τυπώνει «τι θα δεις». Με `[v]` ανοίγεις τον ζωντανό MuJoCo viewer.
+και τυπώνει «τι θα δεις». `[v]` = ζωντανός MuJoCo viewer · `[r]` = εναλλαγή **ρομπότ**
+(G1 ↔ **Talos 94 kg**) — τα walking tasks ([5]–[8]) τρέχουν στο επιλεγμένο ρομπότ.
+
+**Robot-agnostic stack:** ο ίδιος controller/WBC/planner τρέχει G1 και Talos μέσω ενός
+`RobotConfig` (`src/sim/robots.py`)· το Talos έχει box feet (προστίθενται corner contact
+sites μέσω mjSpec) και είναι ήδη torque-controlled.
 
 ### Ταχύτητα βάδισης
 - **~0.11 m/s** μέση (καθαρή απόσταση / συνολικό χρόνο)· **~0.15 m/s** σταθερό forward

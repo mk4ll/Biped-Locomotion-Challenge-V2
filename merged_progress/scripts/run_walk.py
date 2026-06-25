@@ -22,22 +22,23 @@ import numpy as np
 import mujoco
 
 from src.utils.config import load_params
-from src.sim.mujoco_env import make_env_from_params
+from src.sim.mujoco_env import make_robot_env
 from src.control.walking_controller import WalkingController
 from src.planning.walk_plan import WalkPlan
 from src.planning.terrain import make_terrain
 
 
-def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None):
-    """Create env+controller on a terrain and put the robot in a valid start pose."""
+def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None, robot="g1"):
+    """Create env+controller on a terrain and put the robot in a valid start pose.
+    robot: 'g1' or 'talos' (robot-agnostic stack)."""
     if terrain_name == "incline":
         terrain = make_terrain("incline", angle=np.deg2rad(angle_deg))
     elif terrain_name == "stairs":
         terrain = make_terrain("stairs", **(stairs_kw or {}))
     else:
         terrain = make_terrain("flat")
-    env = make_env_from_params("scene_flat", terrain=terrain)
-    ctrl = WalkingController(env, params, terrain=terrain)
+    env, mcfg = make_robot_env(robot, terrain=terrain)
+    ctrl = WalkingController(env, params, terrain=terrain, mcfg=mcfg)
     m, d = env.model, env.data
 
     if terrain_name == "incline":
@@ -46,16 +47,17 @@ def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None):
         ctrl.ori_task.R_des = np.eye(3)                 # torso vertical vs gravity
         act_names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_ACTUATOR, a)
                      for a in range(m.nu)]
-        for j in ("left_ankle_pitch_joint", "right_ankle_pitch_joint"):
+        for j in mcfg["ankle_pitch_joints"]:
             adr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)]
             d.qpos[adr] -= alpha                        # pre-tilt feet flat on slope
-            ctrl.pos_task.q_nom[act_names.index(j)] -= alpha
+            if j in act_names:
+                ctrl.pos_task.q_nom[act_names.index(j)] -= alpha
         mujoco.mj_forward(m, d)
         nrm = Rs @ np.array([0., 0., 1.])
         corners = [c for foot in ctrl.contacts.stance for c in foot["corners"]]
         d.qpos[2] -= (min(d.site_xpos[c] @ nrm for c in corners) - 0.005)
         mujoco.mj_forward(m, d)
-    # flat / stairs: keyframe pose is already valid on the flat start ground
+    # flat / stairs: crouch keyframe pose is already valid on the flat start ground
     return env, ctrl, terrain
 
 
@@ -75,7 +77,7 @@ def settle(env, ctrl, terrain, seconds=0.8):
         env.step(res["tau"])
 
 
-def run(terrain_name="flat", angle_deg=8.0, viewer=False):
+def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1"):
     params = load_params()
     # Per-terrain gait tuning (step length must match the tread run for a
     # feet-together-per-tread stair gait; longer SS + more clearance to climb).
@@ -85,7 +87,7 @@ def run(terrain_name="flat", angle_deg=8.0, viewer=False):
         g["step_length"] = stairs_kw["run"]      # one tread per step (default timing works @0.16)
         g["swing_apex"] = 0.06                    # clear the riser
         g["n_steps"] = 18                         # approach + feet-together climb of all treads
-    env, ctrl, terrain = build_on_terrain(params, terrain_name, angle_deg, stairs_kw)
+    env, ctrl, terrain = build_on_terrain(params, terrain_name, angle_deg, stairs_kw, robot)
     settle(env, ctrl, terrain, 0.8)
 
     base = ctrl.base_id
@@ -137,6 +139,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--terrain", default="flat", choices=["flat", "incline", "stairs"])
     ap.add_argument("--angle", type=float, default=8.0)
+    ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
-    run(args.terrain, args.angle, args.viewer)
+    run(args.terrain, args.angle, args.viewer, args.robot)

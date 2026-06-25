@@ -19,15 +19,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 
 from src.utils.config import load_params
-from src.sim.mujoco_env import make_env_from_params
+from src.sim.mujoco_env import make_robot_env
 from src.control.walking_controller import WalkingController
 from src.planning.walk_plan import WalkPlan
 
 
-def run(vx=0.0, vy=0.0, vyaw=0.0, viewer=False):
+def run(vx=0.0, vy=0.0, vyaw=0.0, viewer=False, robot="g1"):
     params = load_params()
-    env = make_env_from_params("scene_flat")
-    ctrl = WalkingController(env, params)
+    env, mcfg = make_robot_env(robot)
+    ctrl = WalkingController(env, params, mcfg=mcfg)
     base = ctrl.base_id
     init_left = env.data.site_xpos[ctrl.left_site].copy()
     init_right = env.data.site_xpos[ctrl.right_site].copy()
@@ -77,6 +77,7 @@ if __name__ == "__main__":
     ap.add_argument("--vx", type=float, default=0.0)
     ap.add_argument("--vy", type=float, default=0.0)
     ap.add_argument("--vyaw", type=float, default=0.0)
+    ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
-    run(args.vx, args.vy, args.vyaw, args.viewer)
+    run(args.vx, args.vy, args.vyaw, args.viewer, args.robot)
