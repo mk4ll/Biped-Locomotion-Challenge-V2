@@ -47,15 +47,52 @@ swing splines                  heading/yaw track                   friction cone
 | **Omnidirectional** | fwd/back/strafe/**curve +42°** | `run_omni.py --vx 0.1 --vyaw 0.12` |
 | **Push recovery (walk)** | lateral 50 N / sagittal 100 N | `05_push_recovery.py` |
 | Standing on incline (slip-limited) | **stable έως 26° = arctan μ** | `06_walk_incline.py --sweep` |
-| **2ο ρομπότ — Talos (94 kg)** | stand, flat **0.99 m**, incline 8° | `run_walk.py --robot talos` |
-| 🍽 **FUN: Σερβιτόρος** (navigation + δίσκος/φραπέ) | path γύρω από τραπέζια, frappe σταθερό | `run_navigate.py` |
-| 🪨 **FUN: Σίσυφος** (σπρώχνει βράχο σε κλίση) | βράχος +1.3 m / +12 cm uphill | `run_sisyphus.py` |
+| **2ο ρομπότ — Talos (94 kg)** | **όλα τα tasks** (stand/walk/incline/push/fun) | `--robot talos` |
+| 🍽 **FUN: Σερβιτόρος** (slalom + δίσκος/φραπέ) | **weaving** γύρω από τραπέζια, frappe σταθερό | `run_navigate.py` |
+| 🪨 **FUN: Σίσυφος** (σπρώχνει μεγάλη μπάλα) | μπάλα ~ύψος χεριών +0.1 m uphill | `run_sisyphus.py` |
+| **Επιλογή ταχύτητας** | slow/normal/fast (0.11/0.19/0.23 m/s) | `run_walk.py --step-len` ή menu `[s]` |
 
 **Σημαντικό:** το incline walking πήγε από **3° → 16°** στο merge, χάρη στο
 **terrain-aware design** (footsteps ON the surface, friction cones σε surface frame,
 swing feet aligned to normal) — η κύρια συνεισφορά που υιοθετήθηκε από τον Κανέλλο.
+**Όλα τα tasks τρέχουν και στα δύο ρομπότ** (G1 + Talos) μέσω του robot-agnostic stack.
 
 ---
+
+## 2b. Fun tasks — αλγόριθμοι (πίστα & planned trajectory)
+
+### 🍽 Σερβιτόρος: slalom course + planned trajectory
+**Παραγωγή πίστας (`navigation.make_slalom`).** Αντί για ευθεία, χτίζουμε **slalom**:
+1. **Τραπέζια (gates):** `n` τραπέζια τοποθετούνται **εναλλάξ** στην `+y` / `−y` πλευρά της
+   κεντρικής γραμμής, ένα ανά «πύλη», με βήμα `dx` κατά `x`. Κάθε run προστίθεται **τυχαίο
+   jitter** σε θέση/μέγεθος (random κάθε φορά). Κάθε τραπέζι = στρογγυλή ξύλινη επιφάνεια + 4 πόδια.
+2. **Planned trajectory:** κατασκευάζεται **απευθείας** ως ημιτονοειδές **αντίθετης φάσης** από τα
+   τραπέζια: `y(x) = −sign·A·cos(π(x−x₀)/dx)·env(x)`. Έτσι βυθίζεται στο `−A` ακριβώς εκεί που
+   υπάρχει `+amp` τραπέζι (και αντίστροφα) → το ρομπότ **περνά κάθε πύλη από την ελεύθερη πλευρά**.
+   Ένα `env(x)` (envelope) μηδενίζει το πλάτος πριν την 1η και μετά την τελευταία πύλη (ομαλή
+   είσοδος/έξοδος).
+3. **Γιατί δουλεύει (όριο στροφής):** το `dx` επιλέγεται ώστε η **καμπυλότητα** του ημιτόνου
+   `κ = A·(π/dx)²` να μένει κάτω από τον ρυθμό στροφής που αντέχει το gait (≈0.11 rad/βήμα).
+   Πολύ μικρό `dx` → απότομες στροφές → πτώση· γι' αυτό η πίστα **δεν** παράγεται με potential
+   field (που σε στενό slalom δίνει χαοτικές 180° στροφές).
+4. **Walkability retry:** ξαναδειγματίζουμε (νέο seed/jitter) μέχρι η πορεία **να καθαρίζει** κάθε
+   τραπέζι (`min dist > r + 0.27 m`) **και** το curviness ανά βήμα `< 0.11` — ώστε κάθε τυχαίο run
+   να είναι βατό.
+
+**Από το trajectory στη βάδιση (pipeline):**
+`slalom path` → `footstep_planner.plan_path` (βήματα κατά μήκος της πορείας, pelvis κοιτά την
+εφαπτομένη, **per-step heading clamp** ώστε να μη «υπερ-στρίβει» το gait) → **DCM** CoM ref →
+**WBC QP** → torques. Ο δίσκος+φραπές είναι geoms κολλημένα στον κορμό· επειδή ο κορμός μένει
+κατακόρυφος, ο δίσκος μένει **επίπεδος** (ο φραπές δεν χύνεται — μετριέται το torso tilt < 12°).
+Plot: `logs/navigate_*_seed*.png` (slalom weave + τραπέζια + **INITIAL/FINAL** θέση σερβιτόρου).
+
+### 🪨 Σίσυφος
+Το ρομπότ **τεντώνει τα χέρια μπροστά** (override του arm posture) και σπρώχνει μια **μεγάλη
+μπάλα στο ύψος των χεριών** (`r≈0.36`). Η μπάλα είναι δεσμευμένη σε **slide joint κατά μήκος της
+κλίσης** (+ damping) ώστε να μένει μπροστά σαν εκχιονιστήρας. Μια **forward CoM lean** (bias στην
+επιτάχυνση CoM) αντισταθμίζει τη ροπή ανατροπής από την ψηλή επαφή — όπως ένας άνθρωπος γέρνει για
+να σπρώξει. Η μπάλα ανεβαίνει κατά βήματα (push–rollback–push, ο Σισύφειος ρυθμός). Plot:
+`logs/sisyphus_*deg.png`.
 
 ## 3. Ανάλυση ορίων κλίσης (απλά μαθηματικά)
 
@@ -111,6 +148,12 @@ python scripts/run_omni.py --vx 0.10 --vyaw 0.12   # curve
 python scripts/05_push_recovery.py
 python scripts/06_walk_incline.py --sweep          # slip-limit vs theory
 python scripts/evaluate.py                         # full battery -> logs/eval_report.md
+
+# FUN tasks (G1 ή Talos via --robot)
+python scripts/run_navigate.py                     # waiter: random slalom around tables + frappe
+python scripts/run_navigate.py --tables 6 --viewer # more gates, live viewer
+python scripts/run_sisyphus.py --viewer            # push a big ball up the slope
+python scripts/run_sisyphus.py --robot talos --angle 4
 
 # Lecture-style plots: path planning, footstep placement, CoM height, ZMP/DCM
 python scripts/plot_walk.py --terrain flat
