@@ -62,21 +62,15 @@ def tray_decorator(torso_body):
 
 
 def _make_walkable_layout(n_tables, start, seed0):
-    """Resample random tables until the planned path reaches the goal and is not
-    too sharp for the walking gait (so every random run is actually walkable)."""
+    """Resample slalom courses until the planned weave both clears every table and
+    stays within the gait's turn rate (so every random run is actually walkable)."""
     s = seed0
-    for _ in range(80):
-        tables, goal = navigation.random_tables(n_tables, start=start, seed=s)
-        path = navigation.plan_path(start, goal, tables)
-        reached = np.hypot(path[-1, 0] - goal[0], path[-1, 1] - goal[1]) < 0.15
-        # path must reach the goal, be gentle, AND start heading roughly forward
-        # (a table right in front makes the robot veer on its first step -> fall)
-        i02 = int(np.argmin(np.abs(np.cumsum(
-            np.r_[0, np.linalg.norm(np.diff(path, axis=0), axis=1)]) - 0.35)))
-        head0 = np.arctan2(path[i02, 1] - path[0, 1], path[i02, 0] - path[0, 0])
-        ok = (reached and len(tables) == n_tables
-              and navigation.path_curviness(path) < 0.09 and abs(head0) < 0.25)
-        if ok:
+    for _ in range(40):
+        tables, goal, path = navigation.make_slalom(n_tables, seed=s)
+        # planned path must clear every table footprint (+ robot radius)
+        clears = all(min(np.hypot(path[:, 0] - tx, path[:, 1] - ty)) > tr + 0.27
+                     for (tx, ty, tr) in tables)
+        if clears and navigation.path_curviness(path) < 0.11:
             return tables, goal, path, s
         s += 1
     return tables, goal, path, s          # best effort
@@ -89,7 +83,7 @@ def run(robot="g1", n_tables=4, seed=None, viewer=False):
     if seed is None:
         seed = int(np.random.default_rng().integers(0, 100000))   # random each run
     tables, goal, path, seed = _make_walkable_layout(n_tables, start, seed)
-    print(f"(layout seed = {seed}, {len(tables)} tables)")
+    print(f"(slalom seed = {seed}, {len(tables)} tables)")
 
     # terrain with the tables as cylindrical obstacles + a goal marker
     terrain = make_terrain("flat", obstacles=tuple(tables), markers=(goal,))
@@ -158,7 +152,7 @@ def _plot(start, goal, tables, path, log, robot, seed):
         ax.add_patch(Circle((x, y), r, fill=False, color="0.3", lw=1.2))
         ax.text(x, y, "table", ha="center", va="center", fontsize=8, color="0.15")
     # planned path
-    ax.plot(path[:, 0], path[:, 1], "g--", lw=2.0, label="planned path (potential field)")
+    ax.plot(path[:, 0], path[:, 1], "g--", lw=2.0, label="planned trajectory (slalom weave)")
     # walked CoM (faint, shows it tracked the plan)
     ax.plot(log["x"], log["y"], "-", color="0.55", lw=1.2, alpha=0.8, label="walked CoM")
     # initial & final position of the waiter
@@ -170,7 +164,7 @@ def _plot(start, goal, tables, path, log, robot, seed):
     ax.plot(*goal, "g*", ms=20, label="goal (frappe delivered)")
     ax.set_aspect("equal"); ax.grid(True, alpha=0.4); ax.legend(loc="upper left", fontsize=9)
     ax.set_xlabel("x [m]"); ax.set_ylabel("y [m]")
-    ax.set_title(f"Waiter {robot.upper()}: planned path around tables — "
+    ax.set_title(f"Waiter {robot.upper()}: slalom weave around tables — "
                  f"start → end (seed {seed})")
     out = Path(__file__).resolve().parents[1] / "logs" / f"navigate_{robot}_seed{seed}.png"
     fig.tight_layout(); fig.savefig(out, dpi=120)

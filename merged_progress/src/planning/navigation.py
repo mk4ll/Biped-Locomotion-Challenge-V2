@@ -74,6 +74,42 @@ def path_curviness(path, step=0.11):
     return float(np.abs(np.diff(np.unwrap(head))).max()) if len(head) > 1 else 0.0
 
 
+def make_slalom(n, x0=0.9, dx=1.6, amp=0.26, radius=(0.18, 0.22), robot_amp=0.30,
+                jitter=0.10, seed=None):
+    """Generate a weaving SLALOM corridor and its matching planned trajectory.
+
+    Algorithm (see README): tables are placed alternately on the +y / -y side of
+    the centre-line, one per 'gate' spaced ``dx`` apart (with random jitter so each
+    run differs). The planned trajectory is a smooth sinusoid in OPPOSITE phase to
+    the tables -- it dips to -robot_amp exactly where a +amp table sits and to
+    +robot_amp where a -amp table sits -- so the robot threads each gate on the
+    free side. ``dx`` is chosen so the sinusoid's curvature stays within the gait's
+    turn rate (no sharp turns). Returns (tables, goal, path[N,2]).
+    """
+    rng = np.random.default_rng(seed)
+    sign0 = 1 if rng.random() < 0.5 else -1
+    tables, centers = [], []
+    for i in range(n):
+        x = x0 + i * dx + rng.uniform(-jitter, jitter)
+        y = sign0 * (amp if i % 2 == 0 else -amp) + rng.uniform(-jitter, jitter)
+        r = rng.uniform(*radius)
+        tables.append((float(x), float(y), float(r)))
+        centers.append((x, y))
+    goal = (x0 + (n - 1) * dx + 0.8, 0.0)
+
+    # planned trajectory: sinusoid in opposite phase to the tables, ramped in/out
+    xs = np.linspace(0.0, goal[0], 400)
+    path = []
+    for x in xs:
+        # envelope: 0 before the first gate and after the last, full in between
+        env = np.clip(min((x - (x0 - dx)) / dx, (goal[0] - x) / dx, 1.0), 0.0, 1.0)
+        y = -sign0 * robot_amp * np.cos(np.pi * (x - x0) / dx) * env
+        path.append([x, y])
+    path = np.array(path)
+    path[-1] = goal
+    return tables, goal, _smooth(path, k=15)
+
+
 def random_tables(n, area=(0.7, 3.2, -1.0, 1.0), radius=(0.16, 0.24),
                   start=(0, 0), goal=None, clearance=0.6, seed=None, tries=400):
     """Place n well-spaced tables in the area, clear of start/goal.

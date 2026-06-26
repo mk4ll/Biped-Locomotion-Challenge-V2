@@ -80,14 +80,18 @@ def extend_arms(env, ctrl, robot):
     mujoco.mj_forward(m, d)
 
 
-def run(angle_deg=5.0, mass=1.2, radius=0.30, robot="g1", viewer=False):
+def run(angle_deg=5.0, mass=1.3, radius=0.36, robot="g1", viewer=False):
     params = load_params()
     params["gait"]["step_length"] = 0.14           # a determined push
+    params["gait"]["n_steps"] = 8 if robot == "g1" else 5   # push a stretch, then stop
     alpha = np.deg2rad(angle_deg)
-    x0 = 0.65                                        # big ball ahead, at the hands
+    x0 = radius + 0.42                              # ball touches the extended hands
     deco = boulder_decorator(alpha, x0, radius, mass)
     env, ctrl, terrain = build_on_terrain(params, "incline", angle_deg, None, robot, deco)
     extend_arms(env, ctrl, robot)                   # reach both arms forward to push
+    # lean into the ball: a steady forward CoM bias counters the backward tipping
+    # torque from pushing a big ball at hand height (like a person leaning to push).
+    ctrl.slope_accel_ff = np.array([1.2 if robot == "g1" else 0.6, 0.0])
     settle(env, ctrl, terrain, 0.8)
 
     m, d = env.model, env.data
@@ -169,8 +173,8 @@ def _plot(log, angle_deg, robot, mass, radius=0.3):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--angle", type=float, default=5.0)
-    ap.add_argument("--mass", type=float, default=1.2)
-    ap.add_argument("--radius", type=float, default=0.30)
+    ap.add_argument("--mass", type=float, default=1.3)
+    ap.add_argument("--radius", type=float, default=0.36)
     ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
