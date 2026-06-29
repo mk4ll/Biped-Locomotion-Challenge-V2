@@ -4,6 +4,7 @@ This is the planner output consumed by the WBC in Stage 4. It is completely
 independent of the controller (DESCRIPTION.md s2): it only needs the initial
 foot positions and CoM height.
 """
+
 import numpy as np
 
 from src.planning.footstep_planner import FootstepPlanner
@@ -61,10 +62,37 @@ class WalkPlan:
                "omega": self.traj["omega"], "progress": s,
                "support": ph["support"], "phase": ph["type"],
                "swing": ph["swing"], "swing_pos": None, "swing_vel": None,
+               "swing_to": None,
                "heading": ph.get("heading", 0.0)}
         if ph["type"] == "SS":
             pos, vel = swing_trajectory(s, ph["swing_from"], ph["swing_to"],
                                         self.fp.swing_apex, ph["dur"])
             ref["swing_pos"] = pos
             ref["swing_vel"] = vel
+            ref["swing_to"] = np.asarray(ph["swing_to"], float)   # nominal landing (xy+z)
         return ref
+
+    def eval(self, t):
+        """Return {zmp: xy, xi: xy (reference DCM)} at time t for the MPC."""
+        i = self._idx(t)
+        return {"zmp": self.traj["zmp"][i].copy(), "xi": self.traj["dcm"][i].copy()}
+
+    def support_box(self, t, foot_half, margin=0.0):
+        """Axis-aligned CoP feasibility box at time t: returns (lo[2], hi[2]).
+
+        During SS: tight rectangle around the stance foot.
+        During DS: bounding box of both foot centers (conservative, always feasible).
+        foot_half: (half_x, half_y) of the contact patch.
+        """
+        ph, _ = phase_at(self.timeline, t)
+        fh = np.maximum(np.asarray(foot_half, float) - margin, 0.0)
+        if ph["support"] == "double":
+            z_from = np.asarray(ph["zmp_from"], float)
+            z_to = np.asarray(ph["zmp_to"], float)
+            lo = np.minimum(z_from, z_to) - fh
+            hi = np.maximum(z_from, z_to) + fh
+        else:
+            foot_pos = np.asarray(ph["zmp_from"], float)
+            lo = foot_pos - fh
+            hi = foot_pos + fh
+        return lo, hi

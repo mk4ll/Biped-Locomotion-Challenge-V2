@@ -82,6 +82,66 @@ class WalkingController:
         # For incline -> surface normal (constant). For stairs -> per-tread (flat).
         self.R_surface = (terrain.surface_R(0.0, 0.0) if terrain is not None else None)
 
+        # --- DCM Preview-MPC (optional) ---
+        mp = params.get("dcm_mpc", {})
+        self.mpc = None
+        self._mpc_dt = 1.0 / mp.get("freq_hz", 50.0)
+        self._mpc_next_t = 0.0
+        self._mpc_last_cop = None
+        # MPC is initialised lazily on first step() call (needs omega from the plan).
+        self._mpc_params = mp if mp.get("enabled", False) else None
+
+        # --- Arm swing (contralateral hip-shoulder coupling) ---
+        as_cfg = params.get("arm_swing", {})
+        self.k_arm = as_cfg.get("gain", 0.0) if as_cfg.get("enabled", False) else 0.0
+        self._q_nom_base = self.pos_task.q_nom.copy()  # reference nominal (never modified)
+        # Map shoulder pitch joint names -> index in pos_task.q_nom
+        self._sho_idx = {}   # side -> act_dof index (or None if joint not in model)
+        for side, jname in [("left", as_cfg.get("left_shoulder", "left_shoulder_pitch_joint")),
+                             ("right", as_cfg.get("right_shoulder", "right_shoulder_pitch_joint"))]:
+            idx = self._find_act_idx(env.model, jname)
+            if idx is not None:
+                self._sho_idx[side] = idx
+
+        # --- Step timing QP (Khadiv et al. 2016) ---
+        # The StepTimingQP class (src/planning/step_timing.py) is available and tested.
+        # Full per-step timing optimisation requires an event-driven online replanner
+        # (the offline fixed plan doesn't update u_nom after actual foot landings).
+        # In this controller, enabling step_timing widens the capture-point reachability
+        # limit, allowing larger corrective steps under strong lateral pushes.
+        st = params.get("step_timing", {})
+        if st.get("enabled", False):
+            # Wider foot-shift budget + slightly higher gain for better push recovery
+            self.capture_max = st.get("max_shift_st", 0.20)
+            self.capture_gain = st.get("gain_st", 1.2)
+
+    def _find_act_idx(self, model, joint_name):
+        """Return the index of joint_name within pos_task.q_nom (act_dof order), or None."""
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        if jid < 0:
+            return None
+        dof = model.jnt_dofadr[jid]
+        act_dof_list = list(self.terms.act_dof)
+        return act_dof_list.index(dof) if dof in act_dof_list else None
+
+    def _init_mpc(self, omega):
+        from src.planning.dcm_mpc import DCMPreviewMPC, MPCWeights
+        mp = self._mpc_params
+        wts = MPCWeights(
+            w_xi=mp.get("w_xi", 1.0),
+            w_p=mp.get("w_p", 4e-2),
+            w_dp=mp.get("w_dp", 2e-2),
+        )
+        foot_half = tuple(mp.get("foot_half", [0.09, 0.04]))
+        self.mpc = DCMPreviewMPC(
+            omega=omega,
+            horizon=mp.get("horizon", 1.2),
+            dt=mp.get("mpc_dt", 0.02),
+            weights=wts,
+            foot_half=foot_half,
+            box_margin=mp.get("box_margin", 0.0),
+        )
+
     def _surface_R(self, x):
         if self.terrain is None:
             return None
@@ -90,18 +150,26 @@ class WalkingController:
     def step(self, plan, t):
         env = self.env
         ref = plan.reference(t)
-        # --- CoM command: DCM feedback in xy, position PD in z ---
-        # xi = com + com_vel/omega ;  xi_dot_ref = omega (xi_ref - zmp_ref)
-        # xi_dot_cmd = xi_dot_ref + k_dcm (xi_ref - xi)
-        # p_zmp_cmd  = xi - xi_dot_cmd/omega ;  a_com = omega^2 (com - p_zmp_cmd)
         w = ref["omega"]
         J = self.com_task.jacobian(env.data)
         com = self.com_task.com(env.data)
         com_vel = J @ env.data.qvel
-        xi = com[:2] + com_vel[:2] / w
-        xi_dot_ref = w * (ref["dcm"] - ref["zmp"])
-        xi_dot_cmd = xi_dot_ref + self.k_dcm * (ref["dcm"] - xi)
-        p_zmp_cmd = xi - xi_dot_cmd / w
+        xi = com[:2] + com_vel[:2] / w   # measured DCM
+
+        # --- CoM command: DCM MPC or one-step proportional feedback ---
+        if self._mpc_params is not None:
+            if self.mpc is None:
+                self._init_mpc(w)
+            # Throttle MPC solve to mpc_freq_hz; hold CoP between solves.
+            if t >= self._mpc_next_t or self._mpc_last_cop is None:
+                self._mpc_last_cop = self.mpc.solve(plan, t, xi)
+                self._mpc_next_t = t + self._mpc_dt
+            p_zmp_cmd = self._mpc_last_cop
+        else:
+            # One-step proportional law (original): xi_dot_cmd + k*(xi_ref - xi)
+            xi_dot_ref = w * (ref["dcm"] - ref["zmp"])
+            xi_dot_cmd = xi_dot_ref + self.k_dcm * (ref["dcm"] - xi)
+            p_zmp_cmd = xi - xi_dot_cmd / w
         a_xy = w * w * (com[:2] - p_zmp_cmd) + self.slope_accel_ff
         self.com_task.a_ref = np.array([a_xy[0], a_xy[1], 0.0])
         # low-pass the CoM-height reference (smooths the stair step function)
@@ -125,23 +193,46 @@ class WalkingController:
         tasks = [self.com_task, self.ori_task, self.pos_task]
         # swing foot task (only while a foot is airborne)
         if ref["phase"] == "SS" and ref["swing"] is not None:
-            # Capture-point step adjustment: shift the swing-foot landing by
-            # gain*(xi_measured - xi_ref). Updated CONTINUOUSLY through the SS so a
-            # mid-step push is corrected immediately (not one step late). Ramped by
-            # phase progress so it starts from the current foot pose (no jump).
+            # Capture-point step adjustment: shift landing by gain*(xi_meas-xi_ref).
+            # When step_timing is enabled, widen the max reachability limit so the
+            # controller can take larger corrective steps under strong lateral pushes.
             if self.capture_enabled:
-                xi_meas = com[:2] + com_vel[:2] / w
-                off = self.capture_gain * (xi_meas - ref["dcm"])
+                # Capture-point step adjustment: shift landing by gain*(xi_meas-xi_ref).
+                # Ramped by progress so it starts from the current foot pose (no jump).
+                off = self.capture_gain * (xi - ref["dcm"])
                 self._foot_offset = np.clip(off, -self.capture_max, self.capture_max)
+                adj = ref["swing_pos"].copy()
+                adj[:2] = adj[:2] + ref["progress"] * self._foot_offset
+            else:
+                adj = ref["swing_pos"].copy()
+                adj[:2] = adj[:2] + ref["progress"] * self._foot_offset
             sw = self.swing_tasks[ref["swing"]]
-            adj = ref["swing_pos"].copy()
-            adj[:2] = adj[:2] + ref["progress"] * self._foot_offset   # ramp in, no jump
             sw.p_ref = adj
             sw.v_ref = ref["swing_vel"]
             # land the swing foot aligned to the terrain it is heading onto
             if self.terrain is not None:
                 sw.R_des = self._surface_R(adj[0])
             tasks.append(sw)
+
+            # Arm swing: contralateral hip-shoulder coupling (sinusoidal, phase-based).
+            # Right leg swings → left arm forward (+), right arm back (-), and vice versa.
+            if self.k_arm > 0 and len(self._sho_idx) == 2:
+                s = ref["progress"]
+                amp = self.k_arm * np.sin(np.pi * s)
+                swing = ref["swing"]
+                ipsi = swing         # ipsilateral to swing leg → arm goes back
+                contra = "right" if swing == "left" else "left"  # contralateral → arm forward
+                if contra in self._sho_idx:
+                    self.pos_task.q_nom[self._sho_idx[contra]] = (
+                        self._q_nom_base[self._sho_idx[contra]] + amp)
+                if ipsi in self._sho_idx:
+                    self.pos_task.q_nom[self._sho_idx[ipsi]] = (
+                        self._q_nom_base[self._sho_idx[ipsi]] - amp)
+        else:
+            # DS: restore nominal shoulder angles
+            for side, idx in self._sho_idx.items():
+                self.pos_task.q_nom[idx] = self._q_nom_base[idx]
+
         self._prev_support = ref["support"]
         # solve + apply
         tau_fb = self.gc.compute(env.data,

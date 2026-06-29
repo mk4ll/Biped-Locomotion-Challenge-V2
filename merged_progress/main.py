@@ -16,8 +16,13 @@ import os
 import sys
 import subprocess
 
+import platform
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
-PY = sys.executable
+if platform.system() == "Darwin":
+    PY = "mjpython"
+else:
+    PY = sys.executable
 
 # key -> (title, [script+args], supports_viewer, supports_robot, "what you should see")
 TASKS = [
@@ -62,13 +67,31 @@ TASKS = [
      "Robot plans a path around random tables, delivers a frappe; tray stays level."),
     ("d", "FUN: Sisyphus -- push a boulder up an incline",
      ["scripts/run_sisyphus.py", "--angle", "5"], True, True,
-     "Robot walks up a slope shoving a boulder ahead of it (+1.3 m / +12 cm uphill)."),
+     "Robot walks up a slope shoving a big boulder (r=0.55m) with its hands/arms (+1.3m uphill)."),
+    ("e", "DCM preview-MPC flat walk (anticipates support-polygon limits)",
+     ["scripts/run_walk.py", "--terrain", "flat", "--mpc"], True, True,
+     "MPC replaces one-step law: receding-horizon QP over ~60 steps. Same gait, better disturbance."),
+    ("f", "Flat walk with natural arm swing (contralateral coupling)",
+     ["scripts/run_walk.py", "--terrain", "flat", "--arm-swing"], True, True,
+     "Shoulder pitch tracks contralateral hip: natural arm swing throughout gait cycle."),
+    ("g", "Step timing QP — joint footstep + timing optimisation (Khadiv et al.)",
+     ["scripts/run_walk.py", "--terrain", "flat", "--step-timing"], True, True,
+     "Step timing QP optimises landing POSITION and TIMING jointly from measured DCM. Better lateral push recovery."),
+    ("h", "Online velocity following — change direction mid-gait",
+     ["scripts/run_velocity_change.py"], True, True,
+     "Sequential plan segments with changing velocity commands: forward→turn→forward→veer. Adaptive navigation demo."),
+    ("i", "Hard stairs (standard indoor: 4 cm risers, 20 cm run)",
+     ["scripts/run_walk.py", "--terrain", "stairs", "--hard-stairs"], True, True,
+     "Climbs steeper stairs than the default 2.5 cm risers. Swing apex 0.10 m, longer SS to clear 4 cm steps."),
 ]
 TASK_BY_KEY = {t[0]: t[1:] for t in TASKS}
-SPEED_PRESETS = {"slow": 0.10, "normal": 0.16, "fast": 0.20}   # step length [m]
+# Speed preset names — mapped to --speed argument of run_walk.py
+# slow ~0.15 m/s | normal ~0.27 m/s | fast ~0.42 m/s
+SPEED_PRESETS = {"slow": "slow", "normal": "normal", "fast": "fast"}
+SPEED_LABELS  = {"slow": "~0.15 m/s", "normal": "~0.36 m/s", "fast": "~0.39 m/s+MPC"}
 SPEED_ORDER = ["normal", "slow", "fast"]
-# tasks whose speed (step length) the [s] toggle controls (run_walk --step-len)
-SPEED_TASKS = {"5", "6"}
+# tasks whose speed preset the [s] toggle controls
+SPEED_TASKS = {"5", "6", "e", "f", "g"}
 
 
 def getkey():
@@ -99,7 +122,7 @@ def menu(viewer, robot, speed):
     print("-" * 72)
     print(f"  [v] viewer: {'ON ' if viewer else 'OFF'}   "
           f"[r] robot: {robot.upper():5s}   "
-          f"[s] speed: {speed} ({SPEED_PRESETS[speed]:.2f} m)")
+          f"[s] speed: {speed} ({SPEED_LABELS[speed]})")
     print("  [ESC / q]  exit")
     print("=" * 72)
     print("Press a key...")
@@ -115,7 +138,7 @@ def run_task(key, viewer, robot, speed):
     elif robot != "g1":
         print(f"\n(note: task '{title}' is G1-only; running on G1.)")
     if key in SPEED_TASKS:
-        args += ["--step-len", f"{SPEED_PRESETS[speed]:.3f}"]
+        args += ["--speed", SPEED_PRESETS[speed]]
     print("\n" + "-" * 72)
     print(f"RUN [{robot.upper()}]: {title}")
     print(f"WHAT YOU SHOULD SEE: {see}")

@@ -78,18 +78,55 @@ def settle(env, ctrl, terrain, seconds=0.8):
         env.step(res["tau"])
 
 
-def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=None):
+# Speed bundles (validated on G1 flat ground).
+# Each bundle is (gait_params, requires_mpc).
+# slow  : baseline gait, ~0.154 m/s
+# normal: 2.3× baseline, ~0.357 m/s — stable without MPC
+# fast  : 2.6× baseline, ~0.393 m/s — requires DCM preview-MPC for stability
+SPEED_BUNDLES = {
+    "slow":   (dict(step_length=0.10, t_ss=0.50, t_ds=0.15, swing_apex=0.05), False),
+    "normal": (dict(step_length=0.20, t_ss=0.44, t_ds=0.12, swing_apex=0.07), False),
+    "fast":   (dict(step_length=0.24, t_ss=0.49, t_ds=0.12, swing_apex=0.08), True),
+}
+
+
+def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=None,
+        mpc=False, arm_swing=False, step_timing=False, hard_stairs=False, speed=None):
     params = load_params()
-    if step_len is not None:                       # user-selected speed
-        params["gait"]["step_length"] = step_len
-    # Per-terrain gait tuning (step length must match the tread run for a
-    # feet-together-per-tread stair gait; longer SS + more clearance to climb).
-    stairs_kw = dict(rise=0.025, run=0.16, n_steps=6, x0=0.30)
-    if terrain_name == "stairs":
+    if speed is not None and speed in SPEED_BUNDLES:
         g = params["gait"]
-        g["step_length"] = stairs_kw["run"]      # one tread per step (default timing works @0.16)
-        g["swing_apex"] = 0.06                    # clear the riser
-        g["n_steps"] = 18                         # approach + feet-together climb of all treads
+        bundle, needs_mpc = SPEED_BUNDLES[speed]
+        for k, v in bundle.items():
+            g[k] = v
+        if needs_mpc:
+            params["dcm_mpc"]["enabled"] = True   # fast mode requires MPC
+            params["capture"]["max_shift"] = 0.14  # slightly wider corrective budget
+    if step_len is not None:                       # fine-grained override
+        params["gait"]["step_length"] = step_len
+    if mpc:
+        params["dcm_mpc"]["enabled"] = True
+    if arm_swing:
+        params["arm_swing"]["enabled"] = True
+    if step_timing:
+        params["step_timing"]["enabled"] = True
+    # Per-terrain gait tuning
+    if terrain_name == "stairs":
+        if hard_stairs:
+            # Hard: 4 cm risers, 20 cm run (standard indoor stairs)
+            stairs_kw = dict(rise=0.04, run=0.20, n_steps=6, x0=0.30)
+            g = params["gait"]
+            g["step_length"] = stairs_kw["run"]
+            g["swing_apex"] = 0.10               # extra clearance for 4 cm riser
+            g["t_ss"] = 0.55                     # slightly longer SS to clear tall riser
+            g["n_steps"] = 18
+        else:
+            stairs_kw = dict(rise=0.025, run=0.16, n_steps=6, x0=0.30)
+            g = params["gait"]
+            g["step_length"] = stairs_kw["run"]
+            g["swing_apex"] = 0.06
+            g["n_steps"] = 18
+    else:
+        stairs_kw = dict(rise=0.025, run=0.16, n_steps=6, x0=0.30)
     env, ctrl, terrain = build_on_terrain(params, terrain_name, angle_deg, stairs_kw, robot)
     settle(env, ctrl, terrain, 0.8)
 
@@ -129,6 +166,8 @@ def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=N
     dist = env.data.subtree_com[base][0] - x0
     rise = env.data.subtree_com[base][2] - com0[2]
     label = terrain_name + (f" {angle_deg:.0f}deg" if terrain_name == "incline" else "")
+    if terrain_name == "stairs" and hard_stairs:
+        label += " HARD (4cm risers)"
     print(f"\n===== Merged terrain walk: {label} =====")
     print(f"fell             = {fell}")
     print(f"forward distance = {dist:.3f} m")
@@ -145,6 +184,18 @@ if __name__ == "__main__":
     ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     ap.add_argument("--step-len", type=float, default=None,
                     help="step length [m] = speed knob (flat safe <=0.20; ~0.23 m/s)")
+    ap.add_argument("--mpc", action="store_true",
+                    help="use DCM preview-MPC instead of one-step proportional law")
+    ap.add_argument("--arm-swing", action="store_true",
+                    help="enable contralateral arm swing (natural gait)")
+    ap.add_argument("--step-timing", action="store_true",
+                    help="use step timing QP (Khadiv et al.): joint footstep+timing optimisation")
+    ap.add_argument("--hard-stairs", action="store_true",
+                    help="steeper stair configuration: 4 cm risers, 20 cm run (standard indoor)")
+    ap.add_argument("--speed", default=None, choices=["slow", "normal", "fast"],
+                    help="gait speed preset (slow~0.15, normal~0.27, fast~0.42 m/s)")
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
-    run(args.terrain, args.angle, args.viewer, args.robot, args.step_len)
+    run(args.terrain, args.angle, args.viewer, args.robot, args.step_len,
+        mpc=args.mpc, arm_swing=args.arm_swing,
+        step_timing=args.step_timing, hard_stairs=args.hard_stairs, speed=args.speed)

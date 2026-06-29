@@ -14,6 +14,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np
 import mujoco
@@ -28,6 +29,7 @@ from src.control.walking_controller import WalkingController
 from src.planning.walk_plan import WalkPlan
 from src.planning.terrain import make_terrain
 from src.planning import navigation
+from run_walk import settle
 
 
 def tray_decorator(torso_body):
@@ -70,7 +72,7 @@ def _make_walkable_layout(n_tables, start, seed0):
         # planned path must clear every table footprint (+ robot radius)
         clears = all(min(np.hypot(path[:, 0] - tx, path[:, 1] - ty)) > tr + 0.27
                      for (tx, ty, tr) in tables)
-        if clears and navigation.path_curviness(path) < 0.11:
+        if clears and navigation.path_curviness(path) < 0.25:
             return tables, goal, path, s
         s += 1
     return tables, goal, path, s          # best effort
@@ -90,6 +92,8 @@ def run(robot="g1", n_tables=4, seed=None, viewer=False):
     torso = {"g1": "torso_link", "talos": "torso_2_link"}[robot]
     env, mcfg = make_robot_env(robot, terrain=terrain, decorate=tray_decorator(torso))
     ctrl = WalkingController(env, params, terrain=terrain, mcfg=mcfg)
+    # Settle into a stable standing pose before walking (critical for stability)
+    settle(env, ctrl, terrain, 1.0)
 
     base = ctrl.base_id
     il = env.data.site_xpos[ctrl.left_site].copy()

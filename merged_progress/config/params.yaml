@@ -129,3 +129,51 @@ gait:
   first_swing: "right"        # which foot swings first
   com_height: null            # null => use nominal CoM height from keyframe
   dt_plan: 0.002              # planning sample period [s] (matches sim)
+
+# ---------------------------------------------------------------------
+# DCM Preview-MPC (replaces one-step proportional law when enabled)
+# Ported from Kanellos Phase 7. Anticipates upcoming narrow-support phases.
+# Run: python scripts/run_walk.py --mpc
+# ---------------------------------------------------------------------
+dcm_mpc:
+  enabled: false              # true = use receding-horizon QP; false = proportional law
+  freq_hz: 50.0               # MPC solve rate (held between solves; sim runs at 1 kHz)
+  horizon: 1.2                # preview horizon [s] (~2 steps)
+  mpc_dt: 0.02                # preview step size [s] (N = horizon/mpc_dt = 60 steps)
+  # Cost weights (deviation form):
+  w_xi: 1.0                   # DCM tracking weight
+  w_p: 0.04                   # stay near reference ZMP
+  w_dp: 0.02                  # CoP rate smoothness
+  # Support polygon half-dimensions [m] (x_fwd/bwd, y_left/right of contact patch).
+  foot_half: [0.09, 0.04]     # G1 foot patch half-dimensions
+  box_margin: 0.0             # inset the support polygon by this margin [m]
+
+# ---------------------------------------------------------------------
+# Arm swing (contralateral hip-shoulder coupling)
+# Adds natural arm swing during single support. Amplitude ~ k_arm * sin(π*phase).
+# ---------------------------------------------------------------------
+arm_swing:
+  enabled: false              # true = activate contralateral arm swing
+  gain: 0.08                  # amplitude [rad] at mid-swing (tune to taste)
+  left_shoulder: "left_shoulder_pitch_joint"
+  right_shoulder: "right_shoulder_pitch_joint"
+
+# ---------------------------------------------------------------------
+# Step timing QP (Khadiv et al. 2016)
+# Replaces the fixed capture-point gain during single support.
+# Jointly optimises footstep location AND step timing from measured DCM.
+# Expected improvement: lateral push tolerance ~50N -> 80-100N.
+# Run: python scripts/run_walk.py --step-timing
+# ---------------------------------------------------------------------
+step_timing:
+  enabled: false              # true = activate; false = use capture-point gain
+  # Parameters for the StepTimingQP class (src/planning/step_timing.py):
+  w_foot: 1.0                 # cost: stay near nominal footstep location
+  w_time: 4.0                 # cost: stay near nominal timing (prefer foot shift)
+  max_dx: 0.16                # sagittal reachability limit [m] about nominal
+  max_dy: 0.10                # lateral reachability limit [m] about nominal
+  t_min: 0.12                 # minimum remaining SS time [s] (don't step too soon)
+  t_max: 1.20                 # maximum remaining SS time [s]
+  # Enhanced capture-point params active when step_timing is enabled:
+  max_shift_st: 0.20          # wider lateral foot-shift budget [m] (vs 0.12 default)
+  gain_st: 1.2                # slightly higher DCM feedback gain (vs 1.0 default)

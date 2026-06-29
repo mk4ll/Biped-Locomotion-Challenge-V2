@@ -22,8 +22,8 @@
 | Stairs | ❌ | ✅ | ✅ **πλήρης** |
 | Omnidirectional (strafe/turn/curve) | ❌ | ✅ | ✅ |
 | Push recovery | ✅ | ✅ | ✅ |
-| Navigation (obstacle avoidance) | ❌ | ✅ | ⏳ |
-| DCM preview-MPC | ❌ | ✅ | ⏳ |
+| Navigation (obstacle avoidance) | ❌ | ✅ | ✅ (slalom) |
+| DCM preview-MPC | ❌ | ✅ | ✅ (`--mpc`) |
 | 2ο ρομπότ (Talos) | ❌ | ✅ | ✅ ([r] toggle) |
 | Evaluation harness | ❌ | ✅ +GIFs | ✅ |
 | Θεωρητική ανάλυση (slip/tip) | ✅ | ❌ | ✅ |
@@ -32,6 +32,7 @@
 | Επιλογή ταχύτητας (slow/normal/fast) | ❌ | ❌ | ✅ |
 | 🍽 FUN: σερβιτόρος (navigation + φραπέ) | ❌ | ❌ | ✅ |
 | 🪨 FUN: Σίσυφος (βράχος σε κλίση) | ❌ | ❌ | ✅ |
+| Arm swing (contralateral coupling) | ❌ | ❌ | ✅ (`--arm-swing`) |
 
 ## Σύγκριση (+ / −)
 

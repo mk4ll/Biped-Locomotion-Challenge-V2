@@ -28,38 +28,54 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_walk import build_on_terrain, settle
 
 
-def boulder_decorator(angle_rad, x0, radius, mass):
-    """Add a free 'boulder' (box) resting on the incline at x0 (uphill = +x).
+def boulder_decorator(angle_rad, x0, radius, mass, visual_radius=None):
+    """Add a boulder resting on the incline at x0 (uphill = +x).
 
-    A box (not a sphere) so it does not roll freely down the slope -- with high
-    friction it stays where it is pushed (tan(angle) < mu), and the robot shoves
-    it up by body/shin contact. Lower + a bit ahead so the swing feet clear it.
+    The physics sphere uses ``radius`` for collision; an optional larger
+    ``visual_radius`` (non-colliding) overlays it to make the boulder look bigger
+    — useful when the physics sphere must stay small for stability but the visual
+    should match the robot's arm span. When visual_radius is given the physics
+    sphere is rendered semi-transparent so only the large visual sphere shows.
     """
     def deco(spec, mcfg):
         z = np.tan(angle_rad) * x0 + radius * np.cos(angle_rad) + 0.003
         b = spec.worldbody.add_body()
         b.name = "boulder"
         b.pos = [x0, 0.0, z]
-        # constrain the boulder to slide ALONG the slope (no flying off, no rolling
-        # sideways) -- the robot shoves it up like a snow-plough, gravity pulls back.
         j = b.add_joint()
         j.name = "boulder_slide"
         j.type = mujoco.mjtJoint.mjJNT_SLIDE
         j.axis = [np.cos(angle_rad), 0.0, np.sin(angle_rad)]
         j.damping = 6.0
+        # Physics geom (handles collision + mass)
         g = b.add_geom()
         g.name = "boulder_geom"
         g.type = mujoco.mjtGeom.mjGEOM_SPHERE
         g.size = [radius, 0, 0]
         g.mass = mass
-        g.rgba = [0.45, 0.45, 0.48, 1.0]
         g.friction = [0.9, 0.01, 0.001]
+        if visual_radius is not None:
+            # Make physics sphere invisible; show only the large visual sphere
+            g.rgba = [0.40, 0.40, 0.43, 0.0]
+            gv = b.add_geom()
+            gv.name = "boulder_visual"
+            gv.type = mujoco.mjtGeom.mjGEOM_SPHERE
+            gv.size = [visual_radius, 0, 0]
+            gv.rgba = [0.40, 0.40, 0.43, 1.0]
+            gv.contype = 0; gv.conaffinity = 0   # visual only
+            gv.density = 0.0                      # no mass contribution from visual sphere
+        else:
+            g.rgba = [0.45, 0.45, 0.48, 1.0]
     return deco
 
 
 # extended-arms-forward pose (to push a big ball at body height) per robot:
 # joint-name -> angle. Overrides the tray crouch arms for this task.
 _EXTEND_ARMS = {
+    # Arms reach forward-and-down so hands contact the boulder.
+    # shoulder_pitch=-1.4 (80° forward) + elbow=1.3 (74° bend) positions the hands
+    # at ~0.43m height — matches the physics sphere equator on a 5° slope.
+    # A larger visual-only sphere (r=0.55m) is overlaid so the boulder LOOKS bigger.
     "g1": {f"{s}_shoulder_pitch_joint": -1.4 for s in ("left", "right")}
           | {f"{s}_shoulder_roll_joint": 0.0 for s in ("left", "right")}
           | {f"{s}_elbow_joint": 1.3 for s in ("left", "right")},
@@ -80,19 +96,25 @@ def extend_arms(env, ctrl, robot):
     mujoco.mj_forward(m, d)
 
 
-def run(angle_deg=5.0, mass=1.3, radius=0.36, robot="g1", viewer=False):
+PHYSICS_RADIUS = 0.36   # collision sphere radius (physics stability limit)
+VISUAL_RADIUS  = 0.55   # visual overlay radius (makes the boulder look bigger)
+
+
+def run(angle_deg=5.0, mass=1.3, radius=PHYSICS_RADIUS, robot="g1", viewer=False):
     params = load_params()
     params["gait"]["step_length"] = 0.14           # a determined push
     params["gait"]["n_steps"] = 8 if robot == "g1" else 5   # push a stretch, then stop
     alpha = np.deg2rad(angle_deg)
-    x0 = radius + 0.42                              # ball touches the extended hands
-    deco = boulder_decorator(alpha, x0, radius, mass)
+    x0 = radius + 0.42                             # ball touches the extended hands
+    # Visual-only sphere at VISUAL_RADIUS makes the boulder appear larger than the
+    # physics collision sphere (stable arm-contact limit is r≈0.36 on a 5° slope).
+    deco = boulder_decorator(alpha, x0, radius, mass, visual_radius=VISUAL_RADIUS)
     env, ctrl, terrain = build_on_terrain(params, "incline", angle_deg, None, robot, deco)
+    settle(env, ctrl, terrain, 0.6)                 # stabilize before extending arms
     extend_arms(env, ctrl, robot)                   # reach both arms forward to push
     # lean into the ball: a steady forward CoM bias counters the backward tipping
     # torque from pushing a big ball at hand height (like a person leaning to push).
     ctrl.slope_accel_ff = np.array([1.2 if robot == "g1" else 0.6, 0.0])
-    settle(env, ctrl, terrain, 0.8)
 
     m, d = env.model, env.data
     bjid = m.body("boulder").id
@@ -174,7 +196,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--angle", type=float, default=5.0)
     ap.add_argument("--mass", type=float, default=1.3)
-    ap.add_argument("--radius", type=float, default=0.36)
+    ap.add_argument("--radius", type=float, default=PHYSICS_RADIUS)
     ap.add_argument("--robot", default="g1", choices=["g1", "talos"])
     ap.add_argument("--viewer", action="store_true")
     args = ap.parse_args()
