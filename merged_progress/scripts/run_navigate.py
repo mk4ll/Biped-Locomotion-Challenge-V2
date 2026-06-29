@@ -60,6 +60,14 @@ def tray_decorator(torso_body):
         foam.pos = [0.26, 0.0, 0.145]
         foam.rgba = [0.93, 0.88, 0.75, 1.0]
         foam.contype = 0; foam.conaffinity = 0
+        # straw (pink bendy straw sticking out of the foam)
+        straw = b.add_geom()
+        straw.name = "frappe_straw"
+        straw.type = mujoco.mjtGeom.mjGEOM_CYLINDER
+        straw.size = [0.003, 0.045, 0.0]   # 3 mm radius, 9 cm total height
+        straw.pos = [0.26, 0.018, 0.202]    # offset slightly to the side, above foam
+        straw.rgba = [0.95, 0.35, 0.65, 1.0]  # classic pink frappe straw
+        straw.contype = 0; straw.conaffinity = 0
     return deco
 
 
