@@ -206,6 +206,16 @@ class WalkingController:
             else:
                 adj = ref["swing_pos"].copy()
                 adj[:2] = adj[:2] + ref["progress"] * self._foot_offset
+            # Enforce minimum lateral clearance between feet so the
+            # capture-point correction never brings feet dangerously close.
+            swing = ref["swing"]
+            stance_side = "right" if swing == "left" else "left"
+            stance_y = env.data.site_xpos[self.foot_sites[stance_side]][1]
+            _MIN_FOOT_SEP = 0.07   # 7 cm minimum lateral gap (G1 foot width ~5 cm)
+            if swing == "left":
+                adj[1] = max(adj[1], stance_y + _MIN_FOOT_SEP)
+            else:
+                adj[1] = min(adj[1], stance_y - _MIN_FOOT_SEP)
             sw = self.swing_tasks[ref["swing"]]
             sw.p_ref = adj
             sw.v_ref = ref["swing_vel"]

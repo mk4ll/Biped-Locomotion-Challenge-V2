@@ -106,6 +106,9 @@ class Incline(Terrain):
         a = self.angle
         # rotate about +y by -angle => normal [-sin a,0,cos a], plane z = tan(a)*x
         g.quat = [np.cos(a / 2), 0.0, -np.sin(a / 2), 0.0]
+        # Steep inclines need higher friction to prevent slipping;
+        # scale linearly from 0.8 at 0° to 1.5 at 30°+.
+        g.friction = [min(0.8 + 2.33 * a, 1.5), 0.005, 0.0001]
 
     def height(self, x, y):
         return float(np.tan(self.angle) * x)

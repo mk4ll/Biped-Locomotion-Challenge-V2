@@ -1,3 +1,1 @@
-# Ignore large uncompressed gifs
-merged_progress/logs/gifs/*.gif
-!merged_progress/logs/gifs/*_preview.gif
+*.gif

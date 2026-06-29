@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  locomotion:
+    build: .
+    container_name: biped_locomotion
+    # Mount the local directory to allow editing files on host and seeing them in container
+    volumes:
+      - .:/app
+    # Ensure standard input is open for the interactive menu
+    stdin_open: true 
+    tty: true
+    # Environment variables for GUI (X11 Forwarding)
+    # Note: On macOS, you need XQuartz installed and running, and you may need to run `xhost + 127.0.0.1`
+    environment:
+      - DISPLAY=host.docker.internal:0
+      - MUJOCO_GL=egl # Use EGL for headless rendering capabilities if needed

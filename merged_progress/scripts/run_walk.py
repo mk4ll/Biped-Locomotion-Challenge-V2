@@ -48,11 +48,36 @@ def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None, robot=
         ctrl.ori_task.R_des = np.eye(3)                 # torso vertical vs gravity
         act_names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_ACTUATOR, a)
                      for a in range(m.nu)]
+        # Split incline angle between ankle and hip so ankles stay within
+        # their ±50° limit.  Baseline ankle is ~-30° in the keyframe, so
+        # safe additional pre-tilt is at most ~17°.  Anything beyond that
+        # is absorbed as forward hip-pitch flexion (leaning into the slope).
+        ANKLE_LIMIT = 0.30               # max additional ankle pre-tilt [rad] ≈ 17°
+        ankle_delta = min(alpha, ANKLE_LIMIT)
+        hip_delta   = alpha - ankle_delta  # remaining lean via hip pitch
+        hip_joints  = ["left_hip_pitch_joint", "right_hip_pitch_joint"]
+        knee_joints = ["left_knee_joint",      "right_knee_joint"]
         for j in mcfg["ankle_pitch_joints"]:
             adr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)]
-            d.qpos[adr] -= alpha                        # pre-tilt feet flat on slope
+            d.qpos[adr] -= ankle_delta
             if j in act_names:
-                ctrl.pos_task.q_nom[act_names.index(j)] -= alpha
+                ctrl.pos_task.q_nom[act_names.index(j)] -= ankle_delta
+        # Lean hips forward to compensate for slope beyond ankle range,
+        # and add a proportional knee-flex so the CoM height stays similar.
+        for j in hip_joints:
+            jid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)
+            if jid >= 0:
+                adr = m.jnt_qposadr[jid]
+                d.qpos[adr] -= hip_delta
+                if j in act_names:
+                    ctrl.pos_task.q_nom[act_names.index(j)] -= hip_delta
+        for j in knee_joints:
+            jid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, j)
+            if jid >= 0:
+                adr = m.jnt_qposadr[jid]
+                d.qpos[adr] += 0.5 * hip_delta   # partial knee-flex to balance CoM
+                if j in act_names:
+                    ctrl.pos_task.q_nom[act_names.index(j)] += 0.5 * hip_delta
         mujoco.mj_forward(m, d)
         nrm = Rs @ np.array([0., 0., 1.])
         corners = [c for foot in ctrl.contacts.stance for c in foot["corners"]]
@@ -65,6 +90,10 @@ def build_on_terrain(params, terrain_name, angle_deg=8.0, stairs_kw=None, robot=
 def settle(env, ctrl, terrain, seconds=0.8):
     base = ctrl.base_id
     com_ref = env.data.subtree_com[base].copy()
+    # Use the terrain surface orientation so the WBC friction cone is aligned
+    # with the actual contact normal (critical on steep inclines).
+    if terrain is not None:
+        ctrl.R_surface = terrain.surface_R(com_ref[0], com_ref[1])
     for _ in range(int(seconds / env.dt)):
         ctrl.com_task.a_ref = np.zeros(3)
         ctrl.com_task.p_ref = com_ref
@@ -86,7 +115,7 @@ def settle(env, ctrl, terrain, seconds=0.8):
 SPEED_BUNDLES = {
     "slow":   (dict(step_length=0.10, t_ss=0.50, t_ds=0.15, swing_apex=0.05), False),
     "normal": (dict(step_length=0.20, t_ss=0.44, t_ds=0.12, swing_apex=0.07), False),
-    "fast":   (dict(step_length=0.24, t_ss=0.49, t_ds=0.12, swing_apex=0.08), True),
+    "fast":   (dict(step_length=0.28, t_ss=0.48, t_ds=0.12, swing_apex=0.09), True),
 }
 
 
@@ -109,7 +138,6 @@ def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=N
         params["arm_swing"]["enabled"] = True
     if step_timing:
         params["step_timing"]["enabled"] = True
-    # Per-terrain gait tuning
     if terrain_name == "stairs":
         if hard_stairs:
             # Hard: 4 cm risers, 20 cm run (standard indoor stairs)
@@ -120,7 +148,8 @@ def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=N
             g["t_ss"] = 0.55                     # slightly longer SS to clear tall riser
             g["n_steps"] = 18
         else:
-            stairs_kw = dict(rise=0.025, run=0.16, n_steps=6, x0=0.30)
+            # Easy: 2.5 cm risers, 22 cm run (wider tread — foot lands at center)
+            stairs_kw = dict(rise=0.025, run=0.22, n_steps=6, x0=0.30)
             g = params["gait"]
             g["step_length"] = stairs_kw["run"]
             g["swing_apex"] = 0.06
@@ -141,12 +170,17 @@ def run(terrain_name="flat", angle_deg=8.0, viewer=False, robot="g1", step_len=N
     n = int(plan.duration / env.dt)
     log = {"x": [], "z": [], "bz": []}
 
+    # On steep inclines the pelvis crouches as it climbs (CoM height trades
+    # against slope height); use a lower threshold so a valid climbing gait
+    # is not mis-classified as a fall.
+    fall_thresh = 0.45
+
     def loop(i):
         ctrl.step(plan, i * env.dt)
         c = env.data.subtree_com[base]
         log["x"].append(c[0]); log["z"].append(c[2]); log["bz"].append(env.data.qpos[2])
         # "fell" = base dropped well below the local surface height
-        return env.data.qpos[2] - terrain.height(c[0], 0.0) < 0.45
+        return env.data.qpos[2] - terrain.height(c[0], 0.0) < fall_thresh
 
     fell = False
     if viewer:

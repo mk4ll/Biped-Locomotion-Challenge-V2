@@ -175,5 +175,5 @@ step_timing:
   t_min: 0.12                 # minimum remaining SS time [s] (don't step too soon)
   t_max: 1.20                 # maximum remaining SS time [s]
   # Enhanced capture-point params active when step_timing is enabled:
-  max_shift_st: 0.20          # wider lateral foot-shift budget [m] (vs 0.12 default)
+  max_shift_st: 0.14          # wider lateral foot-shift budget [m] (vs 0.09 default)
   gain_st: 1.2                # slightly higher DCM feedback gain (vs 1.0 default)

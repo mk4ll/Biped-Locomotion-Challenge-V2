@@ -55,12 +55,18 @@ def boulder_decorator(angle_rad, x0, radius, mass, visual_radius=None):
         g.mass = mass
         g.friction = [0.9, 0.01, 0.001]
         if visual_radius is not None:
-            # Make physics sphere invisible; show only the large visual sphere
+            # Make physics sphere invisible; show only the large visual sphere.
+            # Shift the visual sphere's centre forward by (visual_radius - radius)
+            # along the slope so its BACK surface coincides with the physics sphere's
+            # back surface -- i.e. the visual boulder's edge is where the robot
+            # actually touches, not 0.19 m inside the boulder.
             g.rgba = [0.40, 0.40, 0.43, 0.0]
+            delta = visual_radius - radius
             gv = b.add_geom()
             gv.name = "boulder_visual"
             gv.type = mujoco.mjtGeom.mjGEOM_SPHERE
             gv.size = [visual_radius, 0, 0]
+            gv.pos = [delta * np.cos(angle_rad), 0.0, delta * np.sin(angle_rad)]
             gv.rgba = [0.40, 0.40, 0.43, 1.0]
             gv.contype = 0; gv.conaffinity = 0   # visual only
             gv.density = 0.0                      # no mass contribution from visual sphere
