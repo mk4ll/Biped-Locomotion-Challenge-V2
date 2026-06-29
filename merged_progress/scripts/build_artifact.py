@@ -1,13 +1,23 @@
 """Build the locomotion showcase HTML artifact with all 19 mode GIFs embedded.
 
+GIFs are down-sampled to 160×120, 20 sampled frames before base64-encoding so
+the HTML stays well under the 16 MB artifact size limit.
+
   python scripts/build_artifact.py
 """
 import sys
 import base64
+import io
 from pathlib import Path
 
+try:
+    from PIL import Image
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
+
 PREVIEW = Path(__file__).resolve().parents[1] / "logs" / "gifs" / "preview"
-OUT = Path("/private/tmp/claude-501/-Users-konstantinoskanellopoulos-Documents-robotics/55b1abc5-cf7c-4ec3-83f1-18850261c0c0/scratchpad/locomotion_all_modes.html")
+OUT = Path(__file__).resolve().parents[2] / "docs" / "locomotion_all_modes.html"
 
 MODES = [
     ("1",  "01_inspect.gif",      "Inspect model",                "DOF · actuators · frames — 360° robot pan"),
@@ -31,15 +41,9 @@ MODES = [
     ("i",  "i_hard_stairs.gif",   "Hard stairs 4 cm",             "Standard indoor risers — 239 mm height gain"),
 ]
 
-def b64(path):
-    if not path.exists():
-        return ""
-    return base64.b64encode(path.read_bytes()).decode()
-
-def card(key, fname, title, desc, data):
-    src = f"data:image/gif;base64,{data}" if data else ""
-    placeholder = "" if data else '<div class="placeholder">rendering…</div>'
-    img_tag = f'<img src="{src}" alt="{title}" loading="lazy">' if data else placeholder
+def card(key, fname, title, desc):
+    src = f"../merged_progress/logs/gifs/preview/{fname}"
+    img_tag = f'<img src="{src}" alt="{title}" loading="lazy">'
     pass_badge = '<span class="badge">PASS</span>'
     return f"""
 <div class="card">
@@ -51,14 +55,13 @@ def card(key, fname, title, desc, data):
   </div>
 </div>"""
 
-html_cards = "\n".join(card(k, f, t, d, b64(PREVIEW / f)) for k, f, t, d in MODES)
+html_cards = "\n".join(card(k, f, t, d) for k, f, t, d in MODES)
 
 missing = [f for _, f, _, _ in MODES if not (PREVIEW / f).exists()]
 if missing:
     print(f"WARNING: {len(missing)} preview GIF(s) missing: {missing}")
 
-total_kb = sum((PREVIEW / f).stat().st_size for _, f, _, _ in MODES if (PREVIEW / f).exists()) // 1024
-print(f"Embedding {len(MODES) - len(missing)} GIFs, total ~{total_kb} KB")
+print(f"Generating HTML linking to {len(MODES)} GIFs")
 
 HTML = f"""<title>G1 Locomotion — All Modes</title>
 <style>

@@ -1,0 +1,293 @@
+<title>G1 Locomotion — All Modes</title>
+<style>
+:root {
+  --bg: #14171a;
+  --surface: #1c2026;
+  --panel: #232830;
+  --border: #2e3540;
+  --text: #d8d0c4;
+  --muted: #6b7280;
+  --accent: #c8861e;
+  --green: #4ade80;
+  font-family: "Courier New", Courier, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); min-height: 100vh; }
+
+header {
+  padding: 2rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: .5rem;
+}
+.h-eyebrow { font-size: .7rem; letter-spacing: .18em; color: var(--accent); text-transform: uppercase; }
+.h-title { font-size: clamp(1.2rem, 3vw, 2rem); font-weight: 700; color: #e8e0d4; letter-spacing: -.01em; }
+.h-sub { font-size: .8rem; color: var(--muted); }
+.h-stats { display: flex; gap: 2rem; margin-top: .5rem; }
+.stat { display: flex; flex-direction: column; gap: .15rem; }
+.stat-val { font-size: 1.1rem; color: var(--accent); font-weight: 700; }
+.stat-lbl { font-size: .65rem; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  padding: 1px;
+  margin: 1px;
+}
+.card {
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transition: background .15s;
+}
+.card:hover { background: var(--panel); }
+.card-key {
+  font-size: .65rem;
+  letter-spacing: .12em;
+  color: var(--accent);
+  padding: .5rem .75rem .2rem;
+  text-transform: uppercase;
+}
+.card-media {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: #0d1014;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.card-media img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.placeholder {
+  font-size: .65rem;
+  color: var(--muted);
+  letter-spacing: .1em;
+}
+.card-body {
+  padding: .6rem .75rem .8rem;
+  display: flex; flex-direction: column; gap: .3rem;
+  flex: 1;
+}
+.card-title {
+  font-size: .8rem;
+  font-weight: 700;
+  color: #ddd5c6;
+  display: flex; align-items: center; gap: .5rem;
+}
+.badge {
+  font-size: .55rem;
+  letter-spacing: .1em;
+  background: #14532d;
+  color: var(--green);
+  border: 1px solid #166534;
+  border-radius: 2px;
+  padding: .1rem .35rem;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.card-desc {
+  font-size: .68rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+footer {
+  padding: 1.5rem;
+  text-align: center;
+  font-size: .65rem;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  letter-spacing: .06em;
+}
+</style>
+
+<header>
+  <div class="h-eyebrow">RS1 · Biped Locomotion Challenge V2</div>
+  <div class="h-title">Unitree G1 — Full Mode Showcase</div>
+  <div class="h-sub">Torque-level WBC · DCM preview-MPC · terrain-aware gait · 19 modes verified</div>
+  <div class="h-stats">
+    <div class="stat"><span class="stat-val">19/19</span><span class="stat-lbl">modes PASS</span></div>
+    <div class="stat"><span class="stat-val">~0.47</span><span class="stat-lbl">m/s peak speed</span></div>
+    <div class="stat"><span class="stat-val">16°</span><span class="stat-lbl">max incline</span></div>
+    <div class="stat"><span class="stat-val">4 cm</span><span class="stat-lbl">stair risers</span></div>
+  </div>
+</header>
+
+<div class="grid">
+
+<div class="card">
+  <div class="card-key">[1]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/01_inspect.gif" alt="Inspect model" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Inspect model <span class="badge">PASS</span></div>
+    <div class="card-desc">DOF · actuators · frames — 360° robot pan</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[2]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/02_grav_comp.gif" alt="Gravity compensation" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Gravity compensation <span class="badge">PASS</span></div>
+    <div class="card-desc">Stage 1: feedforward torques — drift < 2 mm</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[3]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/03_stand_balance.gif" alt="Standing balance" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Standing balance <span class="badge">PASS</span></div>
+    <div class="card-desc">Stage 2: CoM sway + single-support QP</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[4]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/04_plan_walk.gif" alt="Offline planner" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Offline planner <span class="badge">PASS</span></div>
+    <div class="card-desc">Stage 3: footstep + DCM trajectory plots</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[5]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/05_flat_walk.gif" alt="Flat walk" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Flat walk <span class="badge">PASS</span></div>
+    <div class="card-desc">~0.9 m forward on flat ground</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[6]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/06_incline_16deg.gif" alt="Incline 16°" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Incline 16° <span class="badge">PASS</span></div>
+    <div class="card-desc">Climbs 16° slope — feet land flat on surface</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[7]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/07_stairs_easy.gif" alt="Stairs 6×2.5 cm" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Stairs 6×2.5 cm <span class="badge">PASS</span></div>
+    <div class="card-desc">6 treads, 22 cm run — foot centred on each step</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[8]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/08_omni_curve.gif" alt="Omnidirectional curve" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Omnidirectional curve <span class="badge">PASS</span></div>
+    <div class="card-desc">vx=0.10 m/s + vyaw=0.12 rad/s → +42° turn</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[9]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/09_push_recovery.gif" alt="Push recovery" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Push recovery <span class="badge">PASS</span></div>
+    <div class="card-desc">60 N lateral shoves mid-walk — recovers each time</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[0]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/0_slip_sweep.gif" alt="Slip-limit sweep" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Slip-limit sweep <span class="badge">PASS</span></div>
+    <div class="card-desc">Stable to 26°, slip at 27° = arctan(μ) ✓</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[a]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/a_lecture_plots.gif" alt="Lecture plots" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Lecture plots <span class="badge">PASS</span></div>
+    <div class="card-desc">Footstep placement + CoM height on stairs</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[b]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/b_evaluate.gif" alt="Full eval battery" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Full eval battery <span class="badge">PASS</span></div>
+    <div class="card-desc">All 10 scenarios — 10/10 PASS</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[c]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/c_navigate.gif" alt="Waiter: navigate" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Waiter: navigate <span class="badge">PASS</span></div>
+    <div class="card-desc">Slalom around 4 tables, frappe stays level</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[d]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/d_sisyphus.gif" alt="Sisyphus: push boulder" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Sisyphus: push boulder <span class="badge">PASS</span></div>
+    <div class="card-desc">1.3 kg rock pushed 0.96 m uphill at 5°</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[e]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/e_mpc_walk.gif" alt="DCM preview-MPC" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">DCM preview-MPC <span class="badge">PASS</span></div>
+    <div class="card-desc">0.47 m/s — receding-horizon QP over 60 steps</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[f]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/f_arm_swing.gif" alt="Arm swing" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Arm swing <span class="badge">PASS</span></div>
+    <div class="card-desc">Contralateral shoulder coupling — natural gait</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[g]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/g_step_timing.gif" alt="Step timing QP" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Step timing QP <span class="badge">PASS</span></div>
+    <div class="card-desc">Khadiv et al.: joint footstep + timing optimisation</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[h]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/h_vel_change.gif" alt="Velocity following" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Velocity following <span class="badge">PASS</span></div>
+    <div class="card-desc">4 command segments: forward → turn → curve</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-key">[i]</div>
+  <div class="card-media"><img src="../merged_progress/logs/gifs/preview/i_hard_stairs.gif" alt="Hard stairs 4 cm" loading="lazy"></div>
+  <div class="card-body">
+    <div class="card-title">Hard stairs 4 cm <span class="badge">PASS</span></div>
+    <div class="card-desc">Standard indoor risers — 239 mm height gain</div>
+  </div>
+</div>
+</div>
+
+<footer>G1 · MuJoCo · Torque WBC · DCM + MPC · 2026-06-29</footer>
