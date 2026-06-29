@@ -41,9 +41,31 @@ MODES = [
     ("i",  "i_hard_stairs.gif",   "Hard stairs 4 cm",             "Standard indoor risers — 239 mm height gain"),
 ]
 
-def card(key, fname, title, desc):
-    src = f"../merged_progress/logs/gifs/preview/{fname}"
-    img_tag = f'<img src="{src}" alt="{title}" loading="lazy">'
+def b64(path):
+    """Return base64-encoded mini-GIF (160×120, 20 sampled frames)."""
+    if not path.exists():
+        return ""
+    if not _HAS_PIL:
+        return base64.b64encode(path.read_bytes()).decode()
+    try:
+        img = Image.open(path)
+        n = getattr(img, 'n_frames', 1)
+        step = max(1, n // 20)
+        frames = []
+        for fi in range(0, n, step):
+            img.seek(fi)
+            frames.append(img.convert('RGB').resize((160, 120), Image.LANCZOS))
+        buf = io.BytesIO()
+        frames[0].save(buf, format='GIF', save_all=True, append_images=frames[1:],
+                       loop=0, optimize=True)
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return base64.b64encode(path.read_bytes()).decode()
+
+def card(key, fname, title, desc, data):
+    src = f"data:image/gif;base64,{data}" if data else ""
+    placeholder = "" if data else '<div class="placeholder">rendering…</div>'
+    img_tag = f'<img src="{src}" alt="{title}" loading="lazy">' if data else placeholder
     pass_badge = '<span class="badge">PASS</span>'
     return f"""
 <div class="card">
@@ -55,13 +77,14 @@ def card(key, fname, title, desc):
   </div>
 </div>"""
 
-html_cards = "\n".join(card(k, f, t, d) for k, f, t, d in MODES)
+html_cards = "\n".join(card(k, f, t, d, b64(PREVIEW / f)) for k, f, t, d in MODES)
 
 missing = [f for _, f, _, _ in MODES if not (PREVIEW / f).exists()]
 if missing:
     print(f"WARNING: {len(missing)} preview GIF(s) missing: {missing}")
 
-print(f"Generating HTML linking to {len(MODES)} GIFs")
+total_kb = sum((PREVIEW / f).stat().st_size for _, f, _, _ in MODES if (PREVIEW / f).exists()) // 1024
+print(f"Embedding {len(MODES) - len(missing)} GIFs, total ~{total_kb} KB")
 
 HTML = f"""<title>G1 Locomotion — All Modes</title>
 <style>

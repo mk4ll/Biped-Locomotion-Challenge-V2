@@ -83,15 +83,22 @@ TASKS = [
     ("i", "Hard stairs (standard indoor: 4 cm risers, 20 cm run)",
      ["scripts/run_walk.py", "--terrain", "stairs", "--hard-stairs"], True, True,
      "Climbs steeper stairs than the default 2.5 cm risers. Swing apex 0.10 m, longer SS to clear 4 cm steps."),
+    ("j", "SANDBOX -- walk forever (continuous flat walk, viewer required)",
+     ["scripts/run_sandbox.py"], True, True,
+     "Walks flat ground in an infinite loop. Re-plans each time the fixed plan ends. Ctrl-C or close viewer to stop."),
+    ("k", "Turn in place — ~92° yaw rotation (no forward translation)",
+     ["scripts/run_turn.py"], True, True,
+     "Pure yaw rotation: vx=vy=0, vyaw=0.2 rad/s, 12 steps → ~92° turn. "
+     "After 90° the foot support polygon rotates 90°; this is the certified stable limit."),
 ]
 TASK_BY_KEY = {t[0]: t[1:] for t in TASKS}
 # Speed preset names — mapped to --speed argument of run_walk.py
 # slow ~0.15 m/s | normal ~0.27 m/s | fast ~0.42 m/s
 SPEED_PRESETS = {"slow": "slow", "normal": "normal", "fast": "fast"}
-SPEED_LABELS  = {"slow": "~0.15 m/s", "normal": "~0.36 m/s", "fast": "~0.39 m/s+MPC"}
+SPEED_LABELS  = {"slow": "~0.15 m/s", "normal": "~0.36 m/s", "fast": "~0.47 m/s+MPC"}
 SPEED_ORDER = ["normal", "slow", "fast"]
 # tasks whose speed preset the [s] toggle controls
-SPEED_TASKS = {"5", "6", "e", "f", "g"}
+SPEED_TASKS = {"5", "6", "e", "f", "g", "j"}
 
 
 def getkey():
